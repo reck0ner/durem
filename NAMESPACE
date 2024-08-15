@@ -1,0 +1,4 @@
+
+export(dremulateTie)
+importFrom(Rcpp, evalCpp)
+exportPattern("^[[:alpha:]]+")

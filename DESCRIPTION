@@ -1,0 +1,39 @@
+Package: drem
+Type: Package
+Title: drem - Duration Relational Event Models
+Version: 1.1.0
+Date: December 20, 2023
+Authors@R: 
+    c(  person(
+            given = "Rumana",
+            family = "Lakdawala",
+            role = c("aut", "cre"),
+            email = "r.j.lakdawala@tilburguniversity.edu"),
+        person(
+            given = "Marlyne",
+            family = "Meijerink-Bosman",
+            role = "ctb"),    
+        person(
+            given = "Roger",
+            family = "Leenders",
+            role = "ctb",
+            email = "r.t.a.j.leenders@tilburguniversity.edu"),
+        person(
+            given = "Joris",
+            family = "Mulder",
+            role = "ctb",
+            email = "j.mulder3@tilburguniversity.edu")
+    )
+Maintainer: Rumana Lakdawala <R.J.Lakdawala@tilburguniversity.edu>
+Description: drem is a R library to generate and estimate Duration Relational Event Models (DREM).
+License: GPL (>= 3)
+URL: https://github.com/reck0ner/drem
+Depends: 
+    R (>= 2.10),
+Imports:
+    stats,
+    utils,
+    remify (>= 3.2.0),
+    remstats
+RoxygenNote: 7.2.3
+Encoding: UTF-8
