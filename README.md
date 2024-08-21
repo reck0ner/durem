@@ -24,18 +24,19 @@ library(drem)
 
 ## Usage
 ```R
-effects <- ~ baseline(-4) + inertia(0.01) + reciprocity(-0.04) + itp(0.01,scaling="std")
+start_effects <- ~ 1 + remstats::inertia(scaling="std") + remstats::reciprocity(scaling="std")
+stop_effects <- ~ 1 + remstats::outdegreeSender(scaling="std")
 
-dremulateTie(effects, actors = 1:25, time = 20, events = 500, initial = 200)
+start_params <- c(-7,0.2,0.1)
+stop_params <-  c(-4, -0.2)
+
+drem::dremulateTie(start_effects, stop_effects, start_params, stop_params, num_actors = 10, num_events = 1000, stop_threshold = 1500)
 
 ```
 ## Support
 ```R
 #To view all help files in the remulate package
 help(package='drem')
-
-#To view available effects
-help('dremulateTieEffects')
 
 ```
 ## Contributing
