@@ -1,4 +1,6 @@
-#' Function to estimate duration relational event model (DREM)
+#' Estimate Duration Relational Event Model (DREM)
+#' 
+#' @description Function to estimate duration relational event model (DREM)
 #' 
 #'  
 #' @param start_effects formula object for remstats, used to compute the start statistics
@@ -17,7 +19,7 @@
 #' start_effects <- ~ 1 + remstats::inertia(scaling = "std") + remstats::reciprocity(scaling = "std")
 #' end_effects <- ~ 1 + remstats::outdegreeSender(scaling = "std")
 #'
-#' Fit a DREM model
+#' # Fit a DREM model
 #' drem::dremstimate(start_effects, end_effects, dat$edgelist)
 #' 
 #' @export

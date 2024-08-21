@@ -31,7 +31,7 @@
 #' end_params <- c(-4, -0.2)
 #'
 #' # Run the simulation with specified parameters
-#' drem::dremulateTie(start_effects, end_effects, start_params, end_params, num_actors = 10, num_events = 1000, event_threshold = 1500)
+#' drem::dremulate(start_effects, end_effects, start_params, end_params, num_actors = 10, num_events = 1000, event_threshold = 1500)
 #' @details 
 #' A list of available effects for the start and end models of DREM can be obtained with \code{\link[remstats:tie_effects]{remstats::tie_effects()}} and
 #' for a list of undirected effects \code{\link[remstats:tie_effects]{remstats::tie_effects(directed = FALSE)}}

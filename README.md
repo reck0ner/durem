@@ -25,12 +25,16 @@ library(drem)
 ## Usage
 ```R
 start_effects <- ~ 1 + remstats::inertia(scaling="std") + remstats::reciprocity(scaling="std")
-stop_effects <- ~ 1 + remstats::outdegreeSender(scaling="std")
+end_effects <- ~ 1 + remstats::outdegreeSender(scaling="std")
 
-start_params <- c(-7,0.2,0.1)
-stop_params <-  c(-4, -0.2)
+start_params <- c(-7, 0.2, 0.1)
+end_params <-  c(-4, -0.2)
 
-drem::dremulateTie(start_effects, stop_effects, start_params, stop_params, num_actors = 10, num_events = 1000, stop_threshold = 1500)
+dat <- drem::dremulate(start_effects, end_effects, start_params, end_params, num_actors = 10, num_events = 500, event_threshold = 1500)
+
+est <- drem::dremstimate(start_effects,end_effects, dat$edgelist)
+
+summary(est)
 
 ```
 ## Support

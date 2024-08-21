@@ -58,5 +58,5 @@ start_params <- c(-7, 0.2, 0.1)
 end_params <- c(-4, -0.2)
 
 # Run the simulation with specified parameters
-drem::dremulateTie(start_effects, end_effects, start_params, end_params, num_actors = 10, num_events = 1000, event_threshold = 1500)
+drem::dremulate(start_effects, end_effects, start_params, end_params, num_actors = 10, num_events = 1000, event_threshold = 1500)
 }

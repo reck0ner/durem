@@ -2,7 +2,7 @@
 % Please edit documentation in R/dremstimate.R
 \name{dremstimate}
 \alias{dremstimate}
-\title{Function to estimate duration relational event model (DREM)}
+\title{Estimate Duration Relational Event Model (DREM)}
 \usage{
 dremstimate(
   start_effects,
@@ -37,7 +37,7 @@ dur_undirected is set to TRUE if riskset for the duration model needs to be undi
 start_effects <- ~ 1 + remstats::inertia(scaling = "std") + remstats::reciprocity(scaling = "std")
 end_effects <- ~ 1 + remstats::outdegreeSender(scaling = "std")
 
-Fit a DREM model
+# Fit a DREM model
 drem::dremstimate(start_effects, end_effects, dat$edgelist)
 
 }
