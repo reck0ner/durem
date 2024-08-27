@@ -4,10 +4,10 @@
 #' tie based duration relational event model.
 #'
 #'
-#' @param start_effects an object of class \code{"\link[stats]{formula}"}:  a symbolic description of the effects to
+#' @param start_effects formula object:  a symbolic description of the effects to
 #' simulate the start model of DREM. see 'Details' for
 #' the available effects and their corresponding statistics 
-#' @param end_effects an object of class \code{"\link[stats]{formula}"}:  a symbolic description of the effects to
+#' @param end_effects formula object:  a symbolic description of the effects to
 #' simulate the end model of DREM. see 'Details' for
 #' the available effects and their corresponding statistics 
 #' @param num_actors Integer, number of actors in the network.

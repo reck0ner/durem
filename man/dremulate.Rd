@@ -16,11 +16,11 @@ dremulate(
 )
 }
 \arguments{
-\item{start_effects}{an object of class \code{"\link[stats]{formula}"}:  a symbolic description of the effects to
+\item{start_effects}{formula object:  a symbolic description of the effects to
 simulate the start model of DREM. see 'Details' for
 the available effects and their corresponding statistics}
 
-\item{end_effects}{an object of class \code{"\link[stats]{formula}"}:  a symbolic description of the effects to
+\item{end_effects}{formula object:  a symbolic description of the effects to
 simulate the end model of DREM. see 'Details' for
 the available effects and their corresponding statistics}
 

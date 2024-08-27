@@ -5,39 +5,60 @@
 \title{Estimate Duration Relational Event Model (DREM)}
 \usage{
 dremstimate(
-  start_effects,
-  end_effects,
+  effects_start,
+  effects_end,
   edgelist,
+  psi_start = 1,
+  psi_end = 1,
+  memory = c("full", "decay"),
+  half_life = NA,
   dur_undirected = FALSE,
+  reh_undirected = FALSE,
   strip_return = TRUE
 )
 }
 \arguments{
-\item{start_effects}{formula object for remstats, used to compute the start statistics}
+\item{effects_start}{formula object for remstats, used to compute the start statistics}
 
-\item{end_effects}{formula object for remstats, used to compute the end statistics}
+\item{effects_end}{formula object for remstats, used to compute the end statistics}
 
 \item{edgelist}{data.frame with columns (start_time, sender, receiver, end_time)}
 
-\item{dur_undirected}{Logical, if TRUE, riskset for the duration model needs to be undirected. See details}
+\item{psi_start}{numeric value of psi parameter for start DREM model}
+
+\item{psi_end}{numeric value of psi parameter for end DREM model}
+
+\item{memory}{if "full" then no memory effects are incorporated. If "decay" then decay memory effects with specified half life}
+
+\item{half_life}{numeric value of half life parameter for decay memory}
+
+\item{dur_undirected}{TRUE if riskset for the end DREM model needs to be undirected. See details}
+
+\item{reh_undirected}{TRUE if riskset for both start and end DREM models needs to be undirected}
 
 \item{strip_return}{Logical, if TRUE then strip the heavy elements from a glm output object}
-
-\item{actors}{Vector, character vector of actor names}
+}
+\value{
+fitted drem model object
 }
 \description{
 Function to estimate duration relational event model (DREM)
 }
 \details{
-dur_undirected is set to TRUE if riskset for the duration model needs to be undirected. i.e if dyad A->B is in an event, the undirected dyad (AB==BA) is at risk to end the event. This argument can be used when it is not directly observable whether the sender or receiver ended the event
+\code{dur_undirected} is set to \code{TRUE} if riskset for the duration model needs to be undirected. i.e if dyad A->B is in an event, the undirected dyad (AB==BA) is at risk to end the event. This argument can be used when it is not directly observable whether the sender or receiver ended the event.
+
+A list of available effects for the start and end models of DREM can be obtained with \code{\link[remstats:tie_effects]{remstats::tie_effects()}} and
+for a list of undirected effects \code{\link[remstats:tie_effects]{remstats::tie_effects(directed = FALSE)}}
+
+The observation period is assumed to start at t = 0. However, the start time and end times must not be 0. If needed, add small random noise to the first start time
 }
 \examples{
 
 # Define effects for the start and end model of DREM
-start_effects <- ~ 1 + remstats::inertia(scaling = "std") + remstats::reciprocity(scaling = "std")
-end_effects <- ~ 1 + remstats::outdegreeSender(scaling = "std")
+effects_start <- ~ 1 + remstats::inertia(scaling = "std") + remstats::reciprocity(scaling = "std")
+effects_end <- ~ 1 + remstats::outdegreeSender(scaling = "std")
 
 # Fit a DREM model
-drem::dremstimate(start_effects, end_effects, dat$edgelist)
+drem::dremstimate(effects_start, effects_end, edgelist)
 
 }
