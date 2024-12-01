@@ -12,6 +12,8 @@
 #' the available effects and their corresponding statistics 
 #' @param num_actors Integer, number of actors in the network.
 #' @param num_events Integer, maximum number of events to simulate.
+#' @param psi_start Numeric, value of psi parameter for start rate model
+#' @param psi_end Numeric, value of psi parameter for end rate model
 #' @param dur_undirected [Optional] Logical, if TRUE, riskset for the duration model needs to be undirected. See details
 #' @param event_threshold [Optional] Integer, maximum number of  incomplete start or end 
 #' events to simulate before stopping the simulation
@@ -44,6 +46,8 @@ dremulate <- function(
   end_params,
   num_actors,
   num_events,
+  psi_start = 1,
+  psi_end = 1,
   dur_undirected = FALSE,
   event_threshold = NULL
   ){
@@ -54,21 +58,24 @@ dremulate <- function(
 
 	dummy <- data.frame(time = c(1:2), actor1 = c(1,2), actor2 = c(2,3))
 
-	rate_reh <- remify::remify(dummy, actors = 1:num_actors,model="tie",directed = TRUE)
+	start_reh <- remify::remify(dummy, actors = 1:num_actors,model="tie",directed = TRUE)
 
-	rate_stats <- remstats::tomstats(effects = ~ 1 , reh = rate_reh)
+	start_stats <- remstats::tomstats(effects = ~ 1 , reh = start_reh)
 
-	rs <- attr(rate_stats, 'riskset')
+	rs <- attr(start_stats, 'riskset')
 
 	if(dur_undirected){
-		dur_reh <- remify::remify(dummy, actors = 1:num_actors,model="tie",directed = FALSE)
-		dur_stats <- remstats::tomstats(effects = ~ 1 , reh = dur_reh)
-		undir_rs <- attr(dur_stats, 'riskset')
+		end_reh <- remify::remify(dummy, actors = 1:num_actors,model="tie",directed = FALSE)
+		end_stats <- remstats::tomstats(effects = ~ 1 , reh = end_reh)
+		undir_rs <- attr(end_stats, 'riskset')
 	}else{
-		dur_stats <- remstats::tomstats(effects = ~ 1 , reh = rate_reh)		
+		end_stats <- remstats::tomstats(effects = ~ 1 , reh = start_reh)		
 	}
 	edgelist <- data.frame() #start time, sender, receiver, end_time
 	evls <- data.frame()
+
+	start_weighted_edgelist = data.frame() #start_time,sender,recv,start_weight
+	end_weighted_edgelist = data.frame() # end_time,sender,recv,end_weight
 
 	dyads_is.active = rep(FALSE,nrow(rs))
 
@@ -83,18 +90,18 @@ dremulate <- function(
 				if(end_count == 0){
 					return(exp(end_params[1])) #just baseline effect for first event
 				}				
-				if(dim(dur_stats)[3]==1){
-					return(exp(dur_stats[1,x,] * end_params))
+				if(dim(end_stats)[3]==1){
+					return(exp(end_stats[1,x,] * end_params))
 				}
-				return(exp(dur_stats[1,x,] %*% end_params)) 
+				return(exp(end_stats[1,x,] %*% end_params)) 
 			}else{
 				if(start_count == 0){
 					return(exp(start_params[1])) #just baseline effect for first event
 				}
-				if(dim(rate_stats)[3]==1){
-					return(exp(rate_stats[1,x,] * start_params))
+				if(dim(start_stats)[3]==1){
+					return(exp(start_stats[1,x,] * start_params))
 				}
-				return(exp(rate_stats[1,x,] %*% start_params))
+				return(exp(start_stats[1,x,] %*% start_params))
 			}
 		})	
 
@@ -113,14 +120,20 @@ dremulate <- function(
 			x = max(which(evls[,1]==dyad))
 			#update end times
 			edgelist[x,4] = t
+			#update event weight
+			end_weighted_edgelist[x,1] = t
+			start_weighted_edgelist[x,4] = (edgelist[x,4] - edgelist[x,1])^psi_start
+			end_weighted_edgelist[x,4] = (edgelist[x,4] - edgelist[x,1])^psi_end
 			evls[x,3] = t
 			end_count = end_count + 1
 			dyads_is.active[dyad] = FALSE				
 			end_indx = which(edgelist[,4]>0)
 			suppressWarnings({
-			dur_reh <- remify::remify(edgelist[end_indx,c(4,2,3)],actors = 1:num_actors,model="tie")
+			#weighted edgelist
+			#end_reh <- remify::remify(edgelist[end_indx,c(4,2,3,6)],actors = 1:num_actors,model="tie")
+			end_reh <- remify::remify(end_weighted_edgelist, actors = 1:num_actors,model="tie")
 			})
-			dur_stats <- remstats::tomstats(effects = end_effects, reh = dur_reh, start = length(end_indx), stop = length(end_indx))
+			end_stats <- remstats::tomstats(effects = end_effects, reh = end_reh, start = length(end_indx), stop = length(end_indx))
 			
 		}else{
 
@@ -128,14 +141,17 @@ dremulate <- function(
 			if(start_count < num_events){
 				#update dyad/sender/receiver
 				evls = rbind(evls,data.frame(dyad = dyad, time = t, end_time = NA))
-				edgelist = rbind(edgelist,data.frame(time = t, actor1 = rs[dyad,1], actor2= rs[dyad,2], end_time = NA))
-
+				edgelist = rbind(edgelist,data.frame(time = t, actor1 = rs[dyad,1], actor2 = rs[dyad,2], end_time = NA))
+				
+				start_weighted_edgelist = rbind(start_weighted_edgelist,data.frame(time = t, actor1 = rs[dyad,1], actor2 = rs[dyad,2], weight = 1))
+				end_weighted_edgelist = rbind(end_weighted_edgelist,data.frame(time = NA, actor1 = rs[dyad,1], actor2 = rs[dyad,2], weight = 0))
 				dyads_is.active[dyad] = TRUE				
 			}     
-			
-			rate_reh <- remify::remify(edgelist[,c(1,2,3)],actors = 1:num_actors,model="tie")			
-			
-			rate_stats <- remstats::tomstats(effects = start_effects, reh = rate_reh, start = nrow(edgelist), stop = nrow(edgelist))
+			#weighted edgelist
+			#start_reh <- remify::remify(edgelist[,c(1,2,3,5), actors = 1:num_actors,model="tie")			
+			start_reh <- remify::remify(start_weighted_edgelist, actors = 1:num_actors,model="tie")			
+
+			start_stats <- remstats::tomstats(effects = start_effects, reh = start_reh, start = nrow(edgelist), stop = nrow(edgelist))
 			start_count = start_count + 1
 		}
 		#end if max number of events reached
@@ -173,6 +189,8 @@ dremulate <- function(
 		evls = evls,
 		start_params = start_params,
 		end_params = end_params,
+		psi_start = psi_start,
+		psi_end = psi_end,
 		riskset = rs
     )
   )

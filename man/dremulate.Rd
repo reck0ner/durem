@@ -11,6 +11,8 @@ dremulate(
   end_params,
   num_actors,
   num_events,
+  psi_start = 1,
+  psi_end = 1,
   dur_undirected = FALSE,
   event_threshold = NULL
 )
@@ -27,6 +29,10 @@ the available effects and their corresponding statistics}
 \item{num_actors}{Integer, number of actors in the network.}
 
 \item{num_events}{Integer, maximum number of events to simulate.}
+
+\item{psi_start}{Numeric, value of psi parameter for start rate model}
+
+\item{psi_end}{Numeric, value of psi parameter for end rate model}
 
 \item{dur_undirected}{[Optional] Logical, if TRUE, riskset for the duration model needs to be undirected. See details}
 

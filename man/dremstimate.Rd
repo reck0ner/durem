@@ -14,6 +14,8 @@ dremstimate(
   half_life = NA,
   dur_undirected = FALSE,
   reh_undirected = FALSE,
+  concurrent_stat = FALSE,
+  concurrent_directed = FALSE,
   strip_return = TRUE
 )
 }

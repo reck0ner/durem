@@ -41,6 +41,8 @@ dremstimate.grid <- function(
     half_life_candidates = NA,
     dur_undirected = FALSE,
     reh_undirected = FALSE,
+    concurrent_stat = FALSE,
+    concurrent_directed = FALSE,
     strip_return = TRUE,
     save_dir = NULL){
         
@@ -77,6 +79,8 @@ dremstimate.grid <- function(
                         half_life = half_life_candidates[l],
                         dur_undirected = dur_undirected,
                         reh_undirected = reh_undirected,
+                        concurrent_stat = concurrent_stat,
+                        concurrent_directed = concurrent_directed,
                         strip_return = strip_return)
 
                         loglik[j,k,l] = as.numeric(logLik(fit))
@@ -93,6 +97,8 @@ dremstimate.grid <- function(
                         memory = "full",
                         dur_undirected = dur_undirected,
                         reh_undirected = reh_undirected,
+                        concurrent_stat = concurrent_stat,
+                        concurrent_directed = concurrent_directed,
                         strip_return = strip_return)
                 loglik[j,k] = as.numeric(logLik(fit))
 
@@ -167,6 +173,8 @@ dremstimate <- function(
     half_life = NA,
     dur_undirected = FALSE,
     reh_undirected = FALSE,
+    concurrent_stat = FALSE,
+    concurrent_directed = FALSE,
     strip_return = TRUE){
 
     if(any(edgelist$end_time < edgelist$start_time, na.rm = T)) {
@@ -190,7 +198,8 @@ dremstimate <- function(
                     dur_undirected = dur_undirected,
                     reh_undirected = reh_undirected)
     
-    stat_stack <- drem_statstack(edgelist = edgelist, stats_list$start_stats, stats_list$end_stats, dur_undirected = dur_undirected,reh_undirected)   
+    stat_stack <- drem_statstack(edgelist = edgelist, stats_list$start_stats, stats_list$end_stats, dur_undirected = dur_undirected,reh_undirected,concurrent_stat = concurrent_stat,concurrent_directed = concurrent_directed)
+       
     stat_names = colnames(stat_stack)[6:length(colnames(stat_stack))]
     
     fit <- glm(create_glm_formula(stat_names),
@@ -236,7 +245,7 @@ dremstats <- function(effects_start,
     colnames(edgelist)[1:4] = c("start_time","sender","receiver","end_time")
     
     #### start model
-    edgelist$weight <- (edgelist$end_time - edgelist$start_time)^psi_start
+    edgelist$weight <- (edgelist$end_time - edgelist$start_time+1)^psi_start
     
     #split the edgelist into start and end event types
     dur.edgelist = edgelist[rep(seq_len(nrow(edgelist)), each = 2), ]
@@ -245,29 +254,29 @@ dremstats <- function(effects_start,
     
     #memory
     memory <- match.arg(memory)
-    memory <- ifelse(is.na(half_life), "full", "decay")
+    #memory <- ifelse(is.na(half_life), "full", "decay")
     
     #remify
     suppressWarnings({
-        reh_dir <- remify::remify(dur.edgelist[,c("time","sender","receiver","weight","type")], directed = !reh_undirected, types = c("start","end") )
+        reh_dir <- remify::remify(dur.edgelist[,c("time","sender","receiver","weight","type")], directed = !reh_undirected, types = c("start","end"),model="tie")
     })
     
-    start_stats <- remstats::tomstats(effects = effects_start, reh = reh_dir, memory, half_life)
+    start_stats <- remstats::tomstats(effects = effects_start, reh = reh_dir, memory= memory, memory_value = half_life)
     dimnames(start_stats)[[3]] = paste0(dimnames(start_stats)[[3]],".start")
     
     #### end model
-    edgelist$weight <- (edgelist$end_time - edgelist$start_time)^psi_end
+    edgelist$weight <- (edgelist$end_time - edgelist$start_time+1)^psi_end
     dur.edgelist = edgelist[rep(seq_len(nrow(edgelist)), each = 2), ]
     dur.edgelist$type = rep(c("start","end"),nrow(edgelist))    
     dur.edgelist$time = ifelse(dur.edgelist$type=="start",dur.edgelist$start_time,dur.edgelist$end_time)
 
     #end model can be either directed or undirected
     suppressWarnings({         
-        reh_end <- remify::remify(dur.edgelist[,c("time","sender","receiver","weight","type")], types = c("start","end"), directed = !dur_undirected)
+        reh_end <- remify::remify(dur.edgelist[,c("time","sender","receiver","weight","type")], types = c("start","end"), directed = !dur_undirected,model="tie")
     })    
  
-    end_stats <- remstats::tomstats(effects = effects_end, reh = reh_end, memory, half_life)
-
+    end_stats <- remstats::tomstats(effects = effects_end, reh = reh_end, memory = memory, memory_value = half_life)
+    
     dimnames(end_stats)[[3]] = paste0(dimnames(end_stats)[[3]],".end")
 
     return(list(start_stats = start_stats, end_stats = end_stats))
@@ -278,7 +287,6 @@ dremstats <- function(effects_start,
 create_glm_formula <- function(stat_names){
     return(paste0(" obs ~ -1 + offset(logtimediff) + ",paste(stat_names,collapse = " + ")))
 }
-
 
 
 # function to arrange remstats array into a stat stack for glm for the duration rem model
@@ -298,7 +306,12 @@ create_glm_formula <- function(stat_names){
 # This function allows multiple start and end events to occur simultaneously, but only once per unique dyad in an interval
 # @keywords internal
 #'@export 
-drem_statstack <- function(edgelist, start_stats, end_stats, dur_undirected = FALSE,reh_undirected = FALSE){
+drem_statstack <- function(edgelist,
+                    start_stats, end_stats,
+                    dur_undirected = FALSE,
+                    reh_undirected = FALSE,
+                    concurrent_stat = FALSE,
+                    concurrent_directed = FALSE){
     
     colnames(edgelist)[1:4] = c("start_time","sender","receiver","end_time")
     rs = attr(start_stats,"riskset")
@@ -344,10 +357,20 @@ drem_statstack <- function(edgelist, start_stats, end_stats, dur_undirected = FA
     
     logtimediff  <- log(unique_times - c(0,unique_times[-M]))
     
+    P_drem = 0
+    if(concurrent_stat){
+        P_drem = P_drem + 2
+        if(concurrent_directed){
+            P_drem = P_drem + 2
+        }
+    }
+    
     stat_stack <- do.call(rbind.data.frame, lapply(1:M, function(i){
-        stack_row = data.frame(matrix(0,nrow = 0,ncol = (5 + dim(start_stats)[3]+ dim(end_stats)[3])))
         
-        ###### type 1::State: an event endped
+        stack_row = data.frame(matrix(0,nrow = 0,ncol = (5 + dim(start_stats)[3]+ dim(end_stats)[3] + P_drem)))
+        
+
+        ###### type 1::State: an event ended
         # end(d) is observed to end
         #Also allows instantaneous events because start_time <= t
         if(i > 1){
@@ -359,8 +382,36 @@ drem_statstack <- function(edgelist, start_stats, end_stats, dur_undirected = FA
             }
             if(length(dyads_observed) > 0){
                 stack_row = rbind(stack_row,as.data.frame(do.call(rbind,lapply(dyads_observed, function(d){
-                    return(c(1, d, i, logtimediff[i],1, rep(0,P_start),unname(end_stats[i,d,])))
+                    if(P_drem == 0){
+                        return(c(1, d, i, logtimediff[i],1, rep(0,P_start),unname(end_stats[i,d,])))
+                    }else{
+                        # if sender or receiver of d is currently involved in an event then stat_drem = c(0,n) otherwise c(0,0)
+                        if(dur_undirected & !reh_undirected){
+                            sender = dur.rs[d,1]
+                            receiver = dur.rs[d,2]
+                        }else{
+                            sender = rs[d,1]
+                            receiver = rs[d,2]        
+                        }
+                        if(concurrent_stat){
+                            # Count concurrent start overlaps
+                            if(concurrent_directed){
+                                concurrent_send = sum(edgelist$sender == sender & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) + sum(edgelist$receiver == sender & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i])
+                                 concurrent_recv = sum(edgelist$receiver == receiver & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) + sum(edgelist$sender == receiver & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i])
+                                stat_drem = c(0,0, concurrent_send-1, concurrent_recv-1)
+                            }else{
+                                concurrent_end = sum(edgelist$sender == sender & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) + sum(edgelist$receiver == sender & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) +
+                                sum(edgelist$receiver == receiver & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) + sum(edgelist$sender == receiver & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i])
+                            stat_drem = c(0, concurrent_end-2)
+                            }
+                        }
+                        
+                        
+                        return(c(1, d, i, logtimediff[i],1, rep(0,P_start),unname(end_stats[i,d,]),stat_drem))
+                    }
+                    
                 }))))
+                
             }    
         }
 
@@ -378,7 +429,31 @@ drem_statstack <- function(edgelist, start_stats, end_stats, dur_undirected = FA
         #add the active events with end type to riskset
         if(length(dyads_at_risk_end>0)){
             stack_row = rbind(stack_row,as.data.frame(do.call(rbind,lapply(dyads_at_risk_end, function(d){
-                return(c(0, d, i, logtimediff[i] ,2,rep(0,P_start),unname(end_stats[i,d,])))
+                if(P_drem == 0){
+                    return(c(0, d, i, logtimediff[i] ,2,rep(0,P_start),unname(end_stats[i,d,])))
+                }else{                    
+                        # if sender or receiver of d is currently involved in an event then stat_drem = c(n,0) otherwise c(0,0)
+                        if(dur_undirected & !reh_undirected){
+                            sender = dur.rs[d,1]
+                            receiver = dur.rs[d,2]
+                        }else{
+                            sender = rs[d,1]
+                            receiver = rs[d,2]        
+                        }
+                        if(concurrent_stat){
+                            # Count concurrent start overlaps
+                            if(concurrent_directed){
+                                concurrent_send = sum(edgelist$sender == sender & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) + sum(edgelist$receiver == sender & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i])
+                                 concurrent_recv = sum(edgelist$receiver == receiver & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) + sum(edgelist$sender == receiver & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i])
+                                stat_drem = c(0,0, concurrent_send-1, concurrent_recv-1)
+                            }else{
+                                concurrent_end = sum(edgelist$sender == sender & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) + sum(edgelist$receiver == sender & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) +
+                                sum(edgelist$receiver == receiver & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) + sum(edgelist$sender == receiver & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i])
+                            stat_drem = c(0, concurrent_end-2)
+                            }
+                        }                    
+                    return(c(0, d, i, logtimediff[i] ,2,rep(0,P_start),unname(end_stats[i,d,]),stat_drem))
+                }
             }))))
         }
     
@@ -392,8 +467,33 @@ drem_statstack <- function(edgelist, start_stats, end_stats, dur_undirected = FA
         #add the active events with end type to riskset
         if(length(dyads_at_risk_end>0)){
             stack_row = rbind(stack_row,as.data.frame(do.call(rbind,lapply(dyads_at_risk_end, function(d){
-                return(c(1, d, i, logtimediff[i] ,3, unname(start_stats[i,d,]),rep(0,P_end)))
-            }))))
+                if(P_drem==0){
+                    return(c(1, d, i, logtimediff[i] ,3, unname(start_stats[i,d,]),rep(0,P_end)))
+                }else{
+                    
+                        # if sender or receiver of d is currently involved in an event then stat_drem = c(n,0) otherwise c(0,0)
+                        if(dur_undirected & !reh_undirected){
+                            sender = dur.rs[d,1]
+                            receiver = dur.rs[d,2]
+                        }else{
+                            sender = rs[d,1]
+                            receiver = rs[d,2]        
+                        }
+                        if(concurrent_stat){
+                            # Count concurrent start overlaps
+                            if(concurrent_directed){
+                                concurrent_send = sum(edgelist$sender == sender & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) + sum(edgelist$receiver == sender & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i])
+                                 concurrent_recv = sum(edgelist$receiver == receiver & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) + sum(edgelist$sender == receiver & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i])
+                                stat_drem = c(concurrent_send-1, concurrent_recv-1, 0, 0)
+                            }else{
+                                concurrent_start = sum(edgelist$sender == sender & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) + sum(edgelist$receiver == sender & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) +
+                                sum(edgelist$receiver == receiver & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) + sum(edgelist$sender == receiver & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i])
+                            stat_drem = c(concurrent_start-2, 0)
+                            }
+                        }                  
+                    return(c(1, d, i, logtimediff[i] ,3, unname(start_stats[i,d,]),rep(0,P_end),stat_drem))
+                }            
+                }))))
         }
 
         ###### type 4::State: event at risk to start
@@ -406,13 +506,48 @@ drem_statstack <- function(edgelist, start_stats, end_stats, dur_undirected = FA
         #add the active events with start type to riskset
         if(length(dyads_at_risk_start)>0){
             stack_row = rbind(stack_row,as.data.frame(do.call(rbind,lapply(dyads_at_risk_start, function(d){
-                return(c(0, d, i, logtimediff[i] ,4,unname(start_stats[i,d,]),rep(0,P_end)))
+                if(P_drem==0){
+                    return(c(0, d, i, logtimediff[i] ,4,unname(start_stats[i,d,]),rep(0,P_end)))
+                }else{
+                        # if sender or receiver of d is currently involved in an event then stat_drem = c(1,0) otherwise c(0,0)
+                        # Count concurrent start overlaps
+                        if(dur_undirected & !reh_undirected){
+                            sender = dur.rs[d,1]
+                            receiver = dur.rs[d,2]
+                        }else{
+                            sender = rs[d,1]
+                            receiver = rs[d,2]        
+                        }
+                        if(concurrent_stat){
+                            # Count concurrent start overlaps
+                            if(concurrent_directed){
+                                concurrent_send = sum(edgelist$sender == sender & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) + sum(edgelist$receiver == sender & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i])
+                                concurrent_recv = sum(edgelist$receiver == receiver & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) + sum(edgelist$sender == receiver & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i])
+                                stat_drem = c(concurrent_send-1, concurrent_recv-1, 0, 0)
+                            }else{
+                                concurrent_start = sum(edgelist$sender == sender & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) + sum(edgelist$receiver == sender & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) +
+                                sum(edgelist$receiver == receiver & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) + sum(edgelist$sender == receiver & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i])
+                            stat_drem = c(concurrent_start-2, 0)
+                            }
+                        }                                    
+                    return(c(0, d, i, logtimediff[i] ,4,unname(start_stats[i,d,]),rep(0,P_end),stat_drem))
+                }
             }))))            
         }
         return(stack_row)
     }))
     
-    colnames(stat_stack) = c(c("obs","tie","i","logtimediff","type"),dimnames(start_stats)[[3]],dimnames(end_stats)[[3]])
+    if(P_drem==0){
+        colnames(stat_stack) = c(c("obs","tie","i","logtimediff","type"),dimnames(start_stats)[[3]],dimnames(end_stats)[[3]])
+    }else if(concurrent_stat){
+        if(concurrent_directed){
+            colnames(stat_stack) = c(c("obs","tie","i","logtimediff","type"),dimnames(start_stats)[[3]],dimnames(end_stats)[[3]],"concurrent_sender.start","concurrent_receiver.start","concurrent_sender.end","concurrent_receiver.end")
+        }else{
+            colnames(stat_stack) = c(c("obs","tie","i","logtimediff","type"),dimnames(start_stats)[[3]],dimnames(end_stats)[[3]],"concurrent.start","concurrent.end")
+        }
+        
+    }
+    
     return(stat_stack)
 }
 
@@ -440,4 +575,131 @@ strip_glm = function(cm) {
     attr(cm$formula,".Environment") = c()
     
     cm
+}
+
+#' Estimate hyperparameters for Duration Relational Event Model (DREM)
+#' 
+#' @description Function to estimate the hyperparameters for duration relational event model (DREM) using grid search
+#' 
+#'  
+#' @param effects_start formula object for remstats, used to compute the start statistics
+#' @param effects_end formula object for remstats, used to compute the end statistics
+#' @param edgelist data.frame with columns (start_time, sender, receiver, end_time)
+#' @param psi_start_candidates numeric vector of candidate values for psi_start. default value is 1
+#' @param psi_end_candidates numeric vector of candidate values for psi_end. default value is 1
+#' @param memory if "full" then no memory effects are incorporated. If "decay" then decay memory effects with specified half life
+#' @param half_life_candidates numeric vector of candidate values for half life parameters
+#' @param dur_undirected TRUE if riskset for the end DREM model needs to be undirected. See details
+#' @param reh_undirected TRUE if riskset for both start and end DREM models needs to be undirected
+#' @param strip_return logical, if TRUE then strip the heavy elements from a glm output object
+#' @param save_dir character, local directory where to save fitted candidate model files
+#' 
+#' @return list with element \code{loglik}, a matrix or array of loglikelihood of fitted DREM candidate models and \code{mle}, a vector of candidate values (psi_start,psi_end(,half_life)) with maximum likelihood
+#' @details
+#' \code{dur_undirected} is set to \code{TRUE} if riskset for the duration model needs to be undirected. i.e if dyad A->B is in an event, the undirected dyad (AB==BA) is at risk to end the event. This argument can be used when it is not directly observable whether the sender or receiver ended the event
+#' 
+#' A list of available effects for the start and end models of DREM can be obtained with \code{\link[remstats:tie_effects]{remstats::tie_effects()}} and
+#' for a list of undirected effects \code{\link[remstats:tie_effects]{remstats::tie_effects(directed = FALSE)}}
+#' @examples
+#' 
+#' # Define effects for the start and end model of DREM
+#' effects_start <- ~ 1 + remstats::inertia(scaling = "std") + remstats::reciprocity(scaling = "std")
+#' effects_end <- ~ 1 + remstats::outdegreeSender(scaling = "std")
+#'
+#' # Fit a DREM model
+#' drem::dremstimate.grid(effects_start, effects_end, dat$edgelist)
+#' 
+#' @export
+dremstimate.grid.parallel <- function(cl,
+                                      effects_start,
+                                      effects_end,
+                                      edgelist,    
+                                      psi_start_candidates = 1,
+                                      psi_end_candidates = 1,
+                                      memory = c("full", "decay"),
+                                      half_life_candidates = NA,
+                                      dur_undirected = FALSE,
+                                      reh_undirected = FALSE,
+                                      strip_return = TRUE,
+                                      save_dir = NULL) {
+  
+  if (any(edgelist$end_time < edgelist$start_time, na.rm = TRUE)) {
+      stop("End time of an event cannot be before its start time.")
+  }
+  if (anyNA(edgelist$end_time)) {
+      stop("Missing event end time")
+  }
+  
+  memory <- match.arg(memory)
+ 
+  if (memory == "decay" && any(is.na(half_life_candidates))) {
+      stop("Incorrect half life supplied for decay memory.")
+  }
+  
+  # Prepare the parameter grid
+  param_grid <- expand.grid(psi_start = psi_start_candidates,
+                            psi_end = psi_end_candidates,
+                            half_life = ifelse(memory == "decay", half_life_candidates, NA),
+                            stringsAsFactors = FALSE)
+  
+  # Check and convert param_grid to ensure proper data type handling
+  if (!is.data.frame(param_grid)) {
+      param_grid <- as.data.frame(param_grid)
+  }
+
+  # Execute the function in parallel
+  results <- parLapply(cl, param_grid, function(params) {
+    if(memory == "decay"){
+        fit <- dremstimate(effects_start, effects_end, edgelist,
+            psi_start = params[['psi_start']],
+            psi_end = params[['psi_end']],
+            memory = "decay",
+            half_life = params[['half_life']],
+            dur_undirected = dur_undirected,
+            reh_undirected = reh_undirected,
+            strip_return = strip_return)
+        if(!is.null(save_dir)){
+            file_path = paste0(save_dir,"drem_fit_psi_start=",psi_start_candidates[j],"_psi_end=",psi_end_candidates[k],"_half_life=",half_life_candidates[l],".rdata")
+
+            save(fit,file = file_path)
+        }                
+    }else{
+        fit <- dremstimate(effects_start, effects_end, edgelist,
+            psi_start = params[['psi_start']],
+            psi_end = params[['psi_end']],
+            memory = "full",
+            dur_undirected = dur_undirected,
+            reh_undirected = reh_undirected,
+            strip_return = strip_return)
+
+        if(!is.null(save_dir)){
+            file_path = paste0(save_dir,"drem_fit_psi_start=",psi_start_candidates[j],"_psi_end=",psi_end_candidates[k],".rdata")
+
+            save(fit,file = file_path)
+        }
+    }    
+
+    loglik <- as.numeric(logLik(fit))
+
+    return(loglik)
+  })
+
+  if(memory == "decay") {
+    loglik <- array(data = unlist(results), dim = c(length(psi_start_candidates), length(psi_end_candidates), length(half_life_candidates)))
+    dimnames(loglik)[[3]] = half_life_candidates
+  } else {
+    loglik <- matrix(data = unlist(results), nrow = length(psi_start_candidates), ncol = length(psi_end_candidates))
+  }
+
+  dimnames(loglik)[[1]] = psi_start_candidates
+  dimnames(loglik)[[2]] = psi_end_candidates
+
+  # Determine the maximum likelihood estimates
+  indices <- which(loglik == max(loglik), arr.ind = TRUE)
+  mle = c(dimnames(loglik)[[1]][indices[1]], dimnames(loglik)[[2]][indices[2]])
+  if(memory == "decay") {
+    mle = c(mle, dimnames(loglik)[[3]][indices[3]])
+  }
+
+  return(list(loglik = loglik, mle = mle))
 }
