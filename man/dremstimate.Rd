@@ -14,53 +14,69 @@ dremstimate(
   half_life = NA,
   dur_undirected = FALSE,
   reh_undirected = FALSE,
-  concurrent_stat = FALSE,
-  concurrent_directed = FALSE,
+  engaged_stat = FALSE,
+  engaged_directed = TRUE,
   strip_return = TRUE
 )
 }
 \arguments{
-\item{effects_start}{formula object for remstats, used to compute the start statistics}
+\item{effects_start}{Formula object for `remstats`, used to compute the start statistics.}
 
-\item{effects_end}{formula object for remstats, used to compute the end statistics}
+\item{effects_end}{Formula object for `remstats`, used to compute the end statistics.}
 
-\item{edgelist}{data.frame with columns (start_time, sender, receiver, end_time)}
+\item{edgelist}{A `data.frame` with columns: `start_time`, `sender`, `receiver`, and `end_time`.}
 
-\item{psi_start}{numeric value of psi parameter for start DREM model}
+\item{psi_start}{Numeric value of the psi parameter for the start DREM model. Default is `1`.}
 
-\item{psi_end}{numeric value of psi parameter for end DREM model}
+\item{psi_end}{Numeric value of the psi parameter for the end DREM model. Default is `1`.}
 
-\item{memory}{if "full" then no memory effects are incorporated. If "decay" then decay memory effects with specified half life}
+\item{memory}{Character string indicating memory effects. If `"full"`, no memory effects are incorporated. 
+If `"decay"`, decay memory effects are applied with the specified half-life. Default is `"full"`.}
 
-\item{half_life}{numeric value of half life parameter for decay memory}
+\item{half_life}{Numeric value of the half-life parameter for decay memory. Required if `memory = "decay"`. Default is `NA`.}
 
-\item{dur_undirected}{TRUE if riskset for the end DREM model needs to be undirected. See details}
+\item{dur_undirected}{Logical. If `TRUE`, the risk set for the end DREM model is undirected (see Details). Default is `FALSE`.}
 
-\item{reh_undirected}{TRUE if riskset for both start and end DREM models needs to be undirected}
+\item{reh_undirected}{Logical. If `TRUE`, the risk set for both start and end DREM models is undirected. Default is `FALSE`.}
 
-\item{strip_return}{Logical, if TRUE then strip the heavy elements from a glm output object}
+\item{engaged_stat}{Logical. If `TRUE`, includes statistics to account for engagement effects. Default is `FALSE`.}
+
+\item{engaged_directed}{Logical. If `TRUE`, assumes engagement effects are directed. Default is `TRUE`.}
+
+\item{strip_return}{Logical. If `TRUE`, strips the heavy elements from a `glm` output object. Default is `TRUE`.}
 }
 \value{
-fitted drem model object
+A fitted DREM model object.
 }
 \description{
-Function to estimate duration relational event model (DREM)
+This function estimates the Duration Relational Event Model (DREM).
 }
 \details{
-\code{dur_undirected} is set to \code{TRUE} if riskset for the duration model needs to be undirected. i.e if dyad A->B is in an event, the undirected dyad (AB==BA) is at risk to end the event. This argument can be used when it is not directly observable whether the sender or receiver ended the event.
+- The `dur_undirected` parameter should be set to `TRUE` if the risk set for the duration model needs to be undirected. 
+  This means that if a dyad A → B is part of an event, the undirected dyad (AB = BA) is considered at risk to end the event. 
+  This is useful when it is not directly observable whether the sender or receiver ended the event.
 
-A list of available effects for the start and end models of DREM can be obtained with \code{\link[remstats:tie_effects]{remstats::tie_effects()}} and
-for a list of undirected effects \code{\link[remstats:tie_effects]{remstats::tie_effects(directed = FALSE)}}
+- A list of available effects for the start and end models of DREM can be obtained with 
+  \code{\link[remstats:tie_effects]{remstats::tie_effects()}}. For a list of undirected effects, use 
+  \code{\link[remstats:tie_effects]{remstats::tie_effects(directed = FALSE)}}.
 
-The observation period is assumed to start at t = 0. However, the start time and end times must not be 0. If needed, add small random noise to the first start time
+- The observation period is assumed to start at t = 0. However, the start times and end times must not be 0. 
+  If necessary, add small random noise to the first start time to avoid this issue.
 }
 \examples{
-
-# Define effects for the start and end model of DREM
+# Define effects for the start and end models of DREM
 effects_start <- ~ 1 + remstats::inertia(scaling = "std") + remstats::reciprocity(scaling = "std")
 effects_end <- ~ 1 + remstats::outdegreeSender(scaling = "std")
 
+# Create an edgelist data.frame (example format)
+edgelist <- data.frame(
+  start_time = c(1, 2, 3),
+  sender = c("A", "B", "C"),
+  receiver = c("B", "C", "A"),
+  end_time = c(4, 5, 6)
+)
+
 # Fit a DREM model
-drem::dremstimate(effects_start, effects_end, edgelist)
+model <- dremstimate(effects_start, effects_end, edgelist)
 
 }

@@ -14,48 +14,66 @@ dremulate(
   psi_start = 1,
   psi_end = 1,
   dur_undirected = FALSE,
-  event_threshold = NULL
+  event_threshold = NULL,
+  engaged_stat = FALSE,
+  start_engaged_params = NULL,
+  end_engaged_params = NULL
 )
 }
 \arguments{
-\item{start_effects}{formula object:  a symbolic description of the effects to
-simulate the start model of DREM. see 'Details' for
-the available effects and their corresponding statistics}
+\item{start_effects}{Formula object. A symbolic description of the effects used to simulate the start model of DREM. 
+See 'Details' for the available effects and their corresponding statistics.}
 
-\item{end_effects}{formula object:  a symbolic description of the effects to
-simulate the end model of DREM. see 'Details' for
-the available effects and their corresponding statistics}
+\item{end_effects}{Formula object. A symbolic description of the effects used to simulate the end model of DREM. 
+See 'Details' for the available effects and their corresponding statistics.}
 
-\item{num_actors}{Integer, number of actors in the network.}
+\item{start_params}{Numeric vector. Parameters corresponding to the `start_effects` in the DREM start model.}
 
-\item{num_events}{Integer, maximum number of events to simulate.}
+\item{end_params}{Numeric vector. Parameters corresponding to the `end_effects` in the DREM end model.}
 
-\item{psi_start}{Numeric, value of psi parameter for start rate model}
+\item{num_actors}{Integer. The number of actors in the network.}
 
-\item{psi_end}{Numeric, value of psi parameter for end rate model}
+\item{num_events}{Integer. The maximum number of events to simulate.}
 
-\item{dur_undirected}{[Optional] Logical, if TRUE, riskset for the duration model needs to be undirected. See details}
+\item{psi_start}{Numeric. The value of the psi parameter for the start rate model. Default is `1`.}
 
-\item{event_threshold}{[Optional] Integer, maximum number of  incomplete start or end 
-events to simulate before stopping the simulation}
+\item{psi_end}{Numeric. The value of the psi parameter for the end rate model. Default is `1`.}
+
+\item{dur_undirected}{Logical (optional). If `TRUE`, the risk set for the duration model is undirected (see Details). Default is `FALSE`.}
+
+\item{event_threshold}{Integer (optional). The maximum number of incomplete start or end events to simulate before stopping the simulation. Default is `NULL` (no threshold).}
+
+\item{engaged_stat}{Logical (optional). If `TRUE`, includes statistics to account for engagement effects. Default is `FALSE`.}
+
+\item{start_engaged_params}{Numeric vector (optional). Parameters for engagement-related effects in the start model. Default is `NULL`.}
+
+\item{end_engaged_params}{Numeric vector (optional). Parameters for engagement-related effects in the end model. Default is `NULL`.}
 }
 \value{
+A list containing:
 \describe{
-\item{edgelist}{data.frame object with columns (start_time,sender,receiver,end_time)}
-\item{evls}{matrix containing the event list  with columns (dyad,start_time,end_time) where dyad represents the index of the dyad or the (sender,receiver) pair in the riskset}
-\item{riskset}{pair of sender,receiver ids corresponding to dyad index in the riskset}
+  \item{edgelist}{A `data.frame` with columns `start_time`, `sender`, `receiver`, and `end_time`.}
+  \item{evls}{A matrix containing the event list with columns `dyad`, `start_time`, and `end_time`, 
+  where `dyad` represents the index of the dyad or the (`sender`, `receiver`) pair in the risk set.}
+  \item{riskset}{A pair of sender and receiver IDs corresponding to the dyad index in the risk set.}
 }
 }
 \description{
-A function to simulate relational event data by sampling from a
-tie based duration relational event model.
+Simulates relational event data by sampling from a tie-based Duration Relational Event Model (DREM).
 }
 \details{
-A list of available effects for the start and end models of DREM can be obtained with \code{\link[remstats:tie_effects]{remstats::tie_effects()}} and
-for a list of undirected effects \code{\link[remstats:tie_effects]{remstats::tie_effects(directed = FALSE)}}
+- A list of available effects for the start and end models of DREM can be obtained with 
+  \code{\link[remstats:tie_effects]{remstats::tie_effects()}}. For a list of undirected effects, use 
+  \code{\link[remstats:tie_effects]{remstats::tie_effects(directed = FALSE)}}.
+
+- The `dur_undirected` parameter should be set to `TRUE` if the risk set for the duration model needs to be undirected. 
+  For example, if a dyad A → B is part of an event, the undirected dyad (AB = BA) is considered at risk to end the event.
+
+- If `engaged_stat` is `TRUE`, additional engagement-related statistics are included in the simulation. 
+  The parameters for these effects can be specified using `start_engaged_params` for the start model and `end_engaged_params` for the end model.
 }
 \examples{
-# Define effects for the start and end model of DREM
+# Define effects for the start and end models of DREM
 start_effects <- ~ 1 + remstats::inertia(scaling = "std") + remstats::reciprocity(scaling = "std")
 end_effects <- ~ 1 + remstats::outdegreeSender(scaling = "std")
 
@@ -64,5 +82,17 @@ start_params <- c(-7, 0.2, 0.1)
 end_params <- c(-4, -0.2)
 
 # Run the simulation with specified parameters
-drem::dremulate(start_effects, end_effects, start_params, end_params, num_actors = 10, num_events = 1000, event_threshold = 1500)
+simulated_data <- drem::dremulate(
+  start_effects, 
+  end_effects, 
+  start_params, 
+  end_params, 
+  num_actors = 10, 
+  num_events = 1000, 
+  event_threshold = 1500, 
+  engaged_stat = TRUE, 
+  start_engaged_params = c(0.2, 0.2), 
+  end_engaged_params = c(0.2, 0.2)
+)
+
 }

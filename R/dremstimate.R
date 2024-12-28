@@ -180,8 +180,6 @@ dremstimate.grid <- function(
 #' model <- dremstimate(effects_start, effects_end, edgelist)
 #'
 #' @export
-
-#' @export
 dremstimate <- function(
     effects_start,
     effects_end,

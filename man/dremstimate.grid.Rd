@@ -14,8 +14,8 @@ dremstimate.grid(
   half_life_candidates = NA,
   dur_undirected = FALSE,
   reh_undirected = FALSE,
-  concurrent_stat = FALSE,
-  concurrent_directed = FALSE,
+  engaged_stat = FALSE,
+  engaged_directed = FALSE,
   strip_return = TRUE,
   save_dir = NULL
 )
