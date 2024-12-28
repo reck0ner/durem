@@ -41,8 +41,8 @@ dremstimate.grid <- function(
     half_life_candidates = NA,
     dur_undirected = FALSE,
     reh_undirected = FALSE,
-    concurrent_stat = FALSE,
-    concurrent_directed = FALSE,
+    engaged_stat = FALSE,
+    engaged_directed = FALSE,
     strip_return = TRUE,
     save_dir = NULL){
         
@@ -79,8 +79,8 @@ dremstimate.grid <- function(
                         half_life = half_life_candidates[l],
                         dur_undirected = dur_undirected,
                         reh_undirected = reh_undirected,
-                        concurrent_stat = concurrent_stat,
-                        concurrent_directed = concurrent_directed,
+                        engaged_stat = engaged_stat,
+                        engaged_directed = engaged_directed,
                         strip_return = strip_return)
 
                         loglik[j,k,l] = as.numeric(logLik(fit))
@@ -97,8 +97,8 @@ dremstimate.grid <- function(
                         memory = "full",
                         dur_undirected = dur_undirected,
                         reh_undirected = reh_undirected,
-                        concurrent_stat = concurrent_stat,
-                        concurrent_directed = concurrent_directed,
+                        engaged_stat = engaged_stat,
+                        engaged_directed = engaged_directed,
                         strip_return = strip_return)
                 loglik[j,k] = as.numeric(logLik(fit))
 
@@ -130,38 +130,57 @@ dremstimate.grid <- function(
 
 
 #' Estimate Duration Relational Event Model (DREM)
+#'
+#' @description 
+#' This function estimates the Duration Relational Event Model (DREM).
+#'
+#' @param effects_start Formula object for `remstats`, used to compute the start statistics.
+#' @param effects_end Formula object for `remstats`, used to compute the end statistics.
+#' @param edgelist A `data.frame` with columns: `start_time`, `sender`, `receiver`, and `end_time`.
+#' @param psi_start Numeric value of the psi parameter for the start DREM model. Default is `1`.
+#' @param psi_end Numeric value of the psi parameter for the end DREM model. Default is `1`.
+#' @param memory Character string indicating memory effects. If `"full"`, no memory effects are incorporated. 
+#' If `"decay"`, decay memory effects are applied with the specified half-life. Default is `"full"`.
+#' @param half_life Numeric value of the half-life parameter for decay memory. Required if `memory = "decay"`. Default is `NA`.
+#' @param dur_undirected Logical. If `TRUE`, the risk set for the end DREM model is undirected (see Details). Default is `FALSE`.
+#' @param reh_undirected Logical. If `TRUE`, the risk set for both start and end DREM models is undirected. Default is `FALSE`.
+#' @param engaged_stat Logical. If `TRUE`, includes statistics to account for engagement effects. Default is `FALSE`.
+#' @param engaged_directed Logical. If `TRUE`, assumes engagement effects are directed. Default is `TRUE`.
+#' @param strip_return Logical. If `TRUE`, strips the heavy elements from a `glm` output object. Default is `TRUE`.
 #' 
-#' @description Function to estimate duration relational event model (DREM)
-#' 
-#'  
-#' @param effects_start formula object for remstats, used to compute the start statistics
-#' @param effects_end formula object for remstats, used to compute the end statistics
-#' @param edgelist data.frame with columns (start_time, sender, receiver, end_time)
-#' @param psi_start numeric value of psi parameter for start DREM model
-#' @param psi_end numeric value of psi parameter for end DREM model
-#' @param memory if "full" then no memory effects are incorporated. If "decay" then decay memory effects with specified half life
-#' @param half_life numeric value of half life parameter for decay memory
-#' @param dur_undirected TRUE if riskset for the end DREM model needs to be undirected. See details
-#' @param reh_undirected TRUE if riskset for both start and end DREM models needs to be undirected
-#' @param strip_return Logical, if TRUE then strip the heavy elements from a glm output object
-#' @return fitted drem model object
-#' 
-#' @details
-#' \code{dur_undirected} is set to \code{TRUE} if riskset for the duration model needs to be undirected. i.e if dyad A->B is in an event, the undirected dyad (AB==BA) is at risk to end the event. This argument can be used when it is not directly observable whether the sender or receiver ended the event.
-#' 
-#' A list of available effects for the start and end models of DREM can be obtained with \code{\link[remstats:tie_effects]{remstats::tie_effects()}} and
-#' for a list of undirected effects \code{\link[remstats:tie_effects]{remstats::tie_effects(directed = FALSE)}}
-#' 
-#' The observation period is assumed to start at t = 0. However, the start time and end times must not be 0. If needed, add small random noise to the first start time
-#' @examples
-#' 
-#' # Define effects for the start and end model of DREM
+#' @return 
+#' A fitted DREM model object.
+#'
+#' @details 
+#' - The `dur_undirected` parameter should be set to `TRUE` if the risk set for the duration model needs to be undirected. 
+#'   This means that if a dyad A → B is part of an event, the undirected dyad (AB = BA) is considered at risk to end the event. 
+#'   This is useful when it is not directly observable whether the sender or receiver ended the event.
+#'
+#' - A list of available effects for the start and end models of DREM can be obtained with 
+#'   \code{\link[remstats:tie_effects]{remstats::tie_effects()}}. For a list of undirected effects, use 
+#'   \code{\link[remstats:tie_effects]{remstats::tie_effects(directed = FALSE)}}.
+#'
+#' - The observation period is assumed to start at t = 0. However, the start times and end times must not be 0. 
+#'   If necessary, add small random noise to the first start time to avoid this issue.
+#'
+#' @examples 
+#' # Define effects for the start and end models of DREM
 #' effects_start <- ~ 1 + remstats::inertia(scaling = "std") + remstats::reciprocity(scaling = "std")
 #' effects_end <- ~ 1 + remstats::outdegreeSender(scaling = "std")
 #'
+#' # Create an edgelist data.frame (example format)
+#' edgelist <- data.frame(
+#'   start_time = c(1, 2, 3),
+#'   sender = c("A", "B", "C"),
+#'   receiver = c("B", "C", "A"),
+#'   end_time = c(4, 5, 6)
+#' )
+#'
 #' # Fit a DREM model
-#' drem::dremstimate(effects_start, effects_end, edgelist)
-#' 
+#' model <- dremstimate(effects_start, effects_end, edgelist)
+#'
+#' @export
+
 #' @export
 dremstimate <- function(
     effects_start,
@@ -173,9 +192,11 @@ dremstimate <- function(
     half_life = NA,
     dur_undirected = FALSE,
     reh_undirected = FALSE,
-    concurrent_stat = FALSE,
-    concurrent_directed = FALSE,
+    engaged_stat = FALSE,
+    engaged_directed = TRUE,
     strip_return = TRUE){
+
+    colnames(edgelist)[1:4] = c("start_time","sender","receiver","end_time")
 
     if(any(edgelist$end_time < edgelist$start_time, na.rm = T)) {
         stop("End time of an event cannot be before it's start time.")
@@ -198,8 +219,14 @@ dremstimate <- function(
                     dur_undirected = dur_undirected,
                     reh_undirected = reh_undirected)
     
-    stat_stack <- drem_statstack(edgelist = edgelist, stats_list$start_stats, stats_list$end_stats, dur_undirected = dur_undirected,reh_undirected,concurrent_stat = concurrent_stat,concurrent_directed = concurrent_directed)
-       
+    stat_stack <- drem_statstack(edgelist = edgelist,
+                    start_stats = stats_list$start_stats,
+                    end_stats = stats_list$end_stats,
+                    dur_undirected = dur_undirected,
+                    reh_undirected = reh_undirected,
+                    engaged_stat = engaged_stat,
+                    engaged_directed = engaged_directed)
+                    
     stat_names = colnames(stat_stack)[6:length(colnames(stat_stack))]
     
     fit <- glm(create_glm_formula(stat_names),
@@ -230,8 +257,7 @@ dremstimate <- function(
 # 
 # @details
 # dur_undirected is set to TRUE if riskset for the duration model needs to be undirected. i.e if dyad A->B is in an event, the undirected dyad (AB==BA) is at risk to end the event. This argument can be used when it is not directly observable whether the sender or receiver ended the event
-# 
-#@export 
+#  
 dremstats <- function(effects_start, 
     effects_end, 
     edgelist, 
@@ -242,7 +268,7 @@ dremstats <- function(effects_start,
     dur_undirected = FALSE,
     reh_undirected = FALSE){
     
-    colnames(edgelist)[1:4] = c("start_time","sender","receiver","end_time")
+    #colnames(edgelist)[1:4] = c("start_time","sender","receiver","end_time")
     
     #### start model
     edgelist$weight <- (edgelist$end_time - edgelist$start_time+1)^psi_start
@@ -282,38 +308,41 @@ dremstats <- function(effects_start,
     return(list(start_stats = start_stats, end_stats = end_stats))
 }
 
-
 #'@keywords internal
 create_glm_formula <- function(stat_names){
     return(paste0(" obs ~ -1 + offset(logtimediff) + ",paste(stat_names,collapse = " + ")))
 }
 
 
-# function to arrange remstats array into a stat stack for glm for the duration rem model
-# 
-# @param edgelist data.frame with columns in order (start_time, sender, receiver, end_time)
-# @param start_stats remstats object for start stats
-# @param end_stats remstats object for end stats
-# @param dur_undirected (default=FALSE) boolean for if the end model should be undirected
-# 
-# @details
-# start_stats has dimension (M,2D,P1) where M is the number of unique time points (over start and end of an event combined)
-# D = total number of dyads in the network = N*(N-1)
-# P1 = number of start statistics specified
-# 
-# end_stats has dimension (M,2D,P2) where P2 = number of end statistics specified
-# 
-# This function allows multiple start and end events to occur simultaneously, but only once per unique dyad in an interval
-# @keywords internal
-#'@export 
+#' function to arrange remstats array into a stat stack for glm for the duration rem model
+#' 
+#' @param edgelist data.frame with columns in order (start_time, sender, receiver, end_time)
+#' @param num_actors number of actors
+#' @param start_stats remstats object for start stats
+#' @param end_stats remstats object for end stats
+#' @param dur_undirected (default=FALSE) boolean for if the end model should be undirected
+#' 
+#' @details
+#' start_stats has dimension (M,2D,P1) where M is the number of unique time points (over start and end of an event combined)
+#' D = total number of dyads in the network = N*(N-1)
+#' P1 = number of start statistics specified
+#' 
+#' end_stats has dimension (M,2D,P2) where P2 = number of end statistics specified
+#' 
+#' This function allows multiple start and end events to occur simultaneously, but only once per unique dyad in an interval
+#' @keywords internal
+#' @export
 drem_statstack <- function(edgelist,
                     start_stats, end_stats,
                     dur_undirected = FALSE,
                     reh_undirected = FALSE,
-                    concurrent_stat = FALSE,
-                    concurrent_directed = FALSE){
+                    engaged_stat = FALSE,
+                    engaged_directed = TRUE){
     
-    colnames(edgelist)[1:4] = c("start_time","sender","receiver","end_time")
+    num_actors = length(unique(c(edgelist[,2],edgelist[,3])))
+
+    #colnames(edgelist)[1:4] = c("start_time","sender","receiver","end_time")
+
     rs = attr(start_stats,"riskset")
     #start and end event type dyad id
     if(!reh_undirected){
@@ -358,9 +387,10 @@ drem_statstack <- function(edgelist,
     logtimediff  <- log(unique_times - c(0,unique_times[-M]))
     
     P_drem = 0
-    if(concurrent_stat){
-        P_drem = P_drem + 2
-        if(concurrent_directed){
+    if(engaged_stat){
+        P_drem = P_drem + 2 #engaged actor for start and end model
+        #if(engaged_directed){
+        if(engaged_directed){ #one each for sender and
             P_drem = P_drem + 2
         }
     }
@@ -368,7 +398,10 @@ drem_statstack <- function(edgelist,
     stat_stack <- do.call(rbind.data.frame, lapply(1:M, function(i){
         
         stack_row = data.frame(matrix(0,nrow = 0,ncol = (5 + dim(start_stats)[3]+ dim(end_stats)[3] + P_drem)))
-        
+                  
+        engaged_actors <- tabulate(as.numeric(unlist(edgelist[edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i], 2:3], use.names = FALSE)), nbins = num_actors)
+
+
 
         ###### type 1::State: an event ended
         # end(d) is observed to end
@@ -387,22 +420,21 @@ drem_statstack <- function(edgelist,
                     }else{
                         # if sender or receiver of d is currently involved in an event then stat_drem = c(0,n) otherwise c(0,0)
                         if(dur_undirected & !reh_undirected){
-                            sender = dur.rs[d,1]
-                            receiver = dur.rs[d,2]
+                            sender = as.numeric(dur.rs[d,1])
+                            receiver = as.numeric(dur.rs[d,2])
                         }else{
-                            sender = rs[d,1]
-                            receiver = rs[d,2]        
+                            sender = as.numeric(rs[d,1])
+                            receiver = as.numeric(rs[d,2])
                         }
-                        if(concurrent_stat){
-                            # Count concurrent start overlaps
-                            if(concurrent_directed){
-                                concurrent_send = sum(edgelist$sender == sender & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) + sum(edgelist$receiver == sender & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i])
-                                 concurrent_recv = sum(edgelist$receiver == receiver & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) + sum(edgelist$sender == receiver & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i])
-                                stat_drem = c(0,0, concurrent_send-1, concurrent_recv-1)
+                        if(engaged_stat){
+                            # Count engaged start overlaps
+                            if(engaged_directed){
+                                engaged_send = engaged_actors[sender]
+                                engaged_recv = engaged_actors[receiver]
+                                stat_drem = c(0,0, engaged_send, engaged_recv)
                             }else{
-                                concurrent_end = sum(edgelist$sender == sender & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) + sum(edgelist$receiver == sender & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) +
-                                sum(edgelist$receiver == receiver & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) + sum(edgelist$sender == receiver & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i])
-                            stat_drem = c(0, concurrent_end-2)
+                                engaged_end = engaged_actors[sender] + engaged_actors[receiver] - 2                                
+                            stat_drem = c(0, engaged_end)
                             }
                         }
                         
@@ -434,22 +466,22 @@ drem_statstack <- function(edgelist,
                 }else{                    
                         # if sender or receiver of d is currently involved in an event then stat_drem = c(n,0) otherwise c(0,0)
                         if(dur_undirected & !reh_undirected){
-                            sender = dur.rs[d,1]
-                            receiver = dur.rs[d,2]
+                            sender = as.numeric(dur.rs[d,1])
+                            receiver = as.numeric(dur.rs[d,2])
                         }else{
-                            sender = rs[d,1]
-                            receiver = rs[d,2]        
+                            sender = as.numeric(rs[d,1])
+                            receiver = as.numeric(rs[d,2])
                         }
-                        if(concurrent_stat){
-                            # Count concurrent start overlaps
-                            if(concurrent_directed){
-                                concurrent_send = sum(edgelist$sender == sender & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) + sum(edgelist$receiver == sender & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i])
-                                 concurrent_recv = sum(edgelist$receiver == receiver & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) + sum(edgelist$sender == receiver & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i])
-                                stat_drem = c(0,0, concurrent_send-1, concurrent_recv-1)
+                        if(engaged_stat){
+                            # Count engaged start overlaps
+                            if(engaged_directed){
+                                engaged_send = engaged_actors[sender] - 1 
+                                engaged_recv = engaged_actors[receiver] -1
+
+                                stat_drem = c(0,0, engaged_send, engaged_recv)
                             }else{
-                                concurrent_end = sum(edgelist$sender == sender & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) + sum(edgelist$receiver == sender & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) +
-                                sum(edgelist$receiver == receiver & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) + sum(edgelist$sender == receiver & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i])
-                            stat_drem = c(0, concurrent_end-2)
+                                engaged_end = engaged_actors[sender] + engaged_actors[receiver] - 2                                
+                                stat_drem = c(0, engaged_end)
                             }
                         }                    
                     return(c(0, d, i, logtimediff[i] ,2,rep(0,P_start),unname(end_stats[i,d,]),stat_drem))
@@ -469,26 +501,24 @@ drem_statstack <- function(edgelist,
             stack_row = rbind(stack_row,as.data.frame(do.call(rbind,lapply(dyads_at_risk_end, function(d){
                 if(P_drem==0){
                     return(c(1, d, i, logtimediff[i] ,3, unname(start_stats[i,d,]),rep(0,P_end)))
-                }else{
-                    
+                }else{                    
                         # if sender or receiver of d is currently involved in an event then stat_drem = c(n,0) otherwise c(0,0)
                         if(dur_undirected & !reh_undirected){
-                            sender = dur.rs[d,1]
-                            receiver = dur.rs[d,2]
+                            sender = as.numeric(dur.rs[d,1])
+                            receiver = as.numeric(dur.rs[d,2])
                         }else{
-                            sender = rs[d,1]
-                            receiver = rs[d,2]        
+                            sender = as.numeric(rs[d,1])
+                            receiver = as.numeric(rs[d,2])
                         }
-                        if(concurrent_stat){
-                            # Count concurrent start overlaps
-                            if(concurrent_directed){
-                                concurrent_send = sum(edgelist$sender == sender & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) + sum(edgelist$receiver == sender & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i])
-                                 concurrent_recv = sum(edgelist$receiver == receiver & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) + sum(edgelist$sender == receiver & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i])
-                                stat_drem = c(concurrent_send-1, concurrent_recv-1, 0, 0)
+                        if(engaged_stat){
+                            # Count engaged start overlaps
+                            if(engaged_directed){
+                                engaged_send = engaged_actors[sender] - 1 
+                                engaged_recv = engaged_actors[receiver] -1
+                                stat_drem = c(engaged_send, engaged_recv, 0, 0)
                             }else{
-                                concurrent_start = sum(edgelist$sender == sender & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) + sum(edgelist$receiver == sender & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) +
-                                sum(edgelist$receiver == receiver & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) + sum(edgelist$sender == receiver & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i])
-                            stat_drem = c(concurrent_start-2, 0)
+                                engaged_start = engaged_actors[sender] + engaged_actors[receiver] - 2                               
+                            stat_drem = c(engaged_start, 0)
                             }
                         }                  
                     return(c(1, d, i, logtimediff[i] ,3, unname(start_stats[i,d,]),rep(0,P_end),stat_drem))
@@ -510,24 +540,23 @@ drem_statstack <- function(edgelist,
                     return(c(0, d, i, logtimediff[i] ,4,unname(start_stats[i,d,]),rep(0,P_end)))
                 }else{
                         # if sender or receiver of d is currently involved in an event then stat_drem = c(1,0) otherwise c(0,0)
-                        # Count concurrent start overlaps
+                        # Count engaged start overlaps
                         if(dur_undirected & !reh_undirected){
-                            sender = dur.rs[d,1]
-                            receiver = dur.rs[d,2]
+                            sender = as.numeric(dur.rs[d,1])
+                            receiver = as.numeric(dur.rs[d,2])
                         }else{
-                            sender = rs[d,1]
-                            receiver = rs[d,2]        
+                            sender = as.numeric(rs[d,1])
+                            receiver = as.numeric(rs[d,2])
                         }
-                        if(concurrent_stat){
-                            # Count concurrent start overlaps
-                            if(concurrent_directed){
-                                concurrent_send = sum(edgelist$sender == sender & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) + sum(edgelist$receiver == sender & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i])
-                                concurrent_recv = sum(edgelist$receiver == receiver & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) + sum(edgelist$sender == receiver & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i])
-                                stat_drem = c(concurrent_send-1, concurrent_recv-1, 0, 0)
+                        if(engaged_stat){
+                            # Count engaged start overlaps
+                            if(engaged_directed){
+                                engaged_send = engaged_actors[sender]
+                                engaged_recv = engaged_actors[receiver]
+                                stat_drem = c(engaged_send, engaged_recv, 0, 0)
                             }else{
-                                concurrent_start = sum(edgelist$sender == sender & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) + sum(edgelist$receiver == sender & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) +
-                                sum(edgelist$receiver == receiver & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i]) + sum(edgelist$sender == receiver & edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i])
-                            stat_drem = c(concurrent_start-2, 0)
+                                engaged_start = engaged_actors[sender] + engaged_actors[receiver]                               
+                                stat_drem = c(engaged_start, 0)
                             }
                         }                                    
                     return(c(0, d, i, logtimediff[i] ,4,unname(start_stats[i,d,]),rep(0,P_end),stat_drem))
@@ -539,17 +568,18 @@ drem_statstack <- function(edgelist,
     
     if(P_drem==0){
         colnames(stat_stack) = c(c("obs","tie","i","logtimediff","type"),dimnames(start_stats)[[3]],dimnames(end_stats)[[3]])
-    }else if(concurrent_stat){
-        if(concurrent_directed){
-            colnames(stat_stack) = c(c("obs","tie","i","logtimediff","type"),dimnames(start_stats)[[3]],dimnames(end_stats)[[3]],"concurrent_sender.start","concurrent_receiver.start","concurrent_sender.end","concurrent_receiver.end")
+    }else if(engaged_stat){
+        if(engaged_directed){
+            colnames(stat_stack) = c(c("obs","tie","i","logtimediff","type"),dimnames(start_stats)[[3]],dimnames(end_stats)[[3]],"engaged_sender.start","engaged_receiver.start","engaged_sender.end","engaged_receiver.end")
         }else{
-            colnames(stat_stack) = c(c("obs","tie","i","logtimediff","type"),dimnames(start_stats)[[3]],dimnames(end_stats)[[3]],"concurrent.start","concurrent.end")
+            colnames(stat_stack) = c(c("obs","tie","i","logtimediff","type"),dimnames(start_stats)[[3]],dimnames(end_stats)[[3]],"engaged.start","engaged.end")
         }
         
     }
     
     return(stat_stack)
 }
+
 
 
 strip_glm = function(cm) {

@@ -1,30 +1,46 @@
 #' Simulate Temporal Events with Duration Relational Event Model (DREM)
+#'
 #' @description 
-#'  A function to simulate relational event data by sampling from a
-#' tie based duration relational event model.
+#' Simulates relational event data by sampling from a tie-based Duration Relational Event Model (DREM).
 #'
+#' @param start_effects Formula object. A symbolic description of the effects used to simulate the start model of DREM. 
+#' See 'Details' for the available effects and their corresponding statistics.
+#' @param end_effects Formula object. A symbolic description of the effects used to simulate the end model of DREM. 
+#' See 'Details' for the available effects and their corresponding statistics.
+#' @param start_params Numeric vector. Parameters corresponding to the `start_effects` in the DREM start model.
+#' @param end_params Numeric vector. Parameters corresponding to the `end_effects` in the DREM end model.
+#' @param num_actors Integer. The number of actors in the network.
+#' @param num_events Integer. The maximum number of events to simulate.
+#' @param psi_start Numeric. The value of the psi parameter for the start rate model. Default is `1`.
+#' @param psi_end Numeric. The value of the psi parameter for the end rate model. Default is `1`.
+#' @param dur_undirected Logical (optional). If `TRUE`, the risk set for the duration model is undirected (see Details). Default is `FALSE`.
+#' @param event_threshold Integer (optional). The maximum number of incomplete start or end events to simulate before stopping the simulation. Default is `NULL` (no threshold).
+#' @param engaged_stat Logical (optional). If `TRUE`, includes statistics to account for engagement effects. Default is `FALSE`.
+#' @param start_engaged_params Numeric vector (optional). Parameters for engagement-related effects in the start model. Default is `NULL`.
+#' @param end_engaged_params Numeric vector (optional). Parameters for engagement-related effects in the end model. Default is `NULL`.
 #'
-#' @param start_effects formula object:  a symbolic description of the effects to
-#' simulate the start model of DREM. see 'Details' for
-#' the available effects and their corresponding statistics 
-#' @param end_effects formula object:  a symbolic description of the effects to
-#' simulate the end model of DREM. see 'Details' for
-#' the available effects and their corresponding statistics 
-#' @param num_actors Integer, number of actors in the network.
-#' @param num_events Integer, maximum number of events to simulate.
-#' @param psi_start Numeric, value of psi parameter for start rate model
-#' @param psi_end Numeric, value of psi parameter for end rate model
-#' @param dur_undirected [Optional] Logical, if TRUE, riskset for the duration model needs to be undirected. See details
-#' @param event_threshold [Optional] Integer, maximum number of  incomplete start or end 
-#' events to simulate before stopping the simulation
-#'
-#' @return \describe{
-#' \item{edgelist}{data.frame object with columns (start_time,sender,receiver,end_time)}
-#' \item{evls}{matrix containing the event list  with columns (dyad,start_time,end_time) where dyad represents the index of the dyad or the (sender,receiver) pair in the riskset}
-#' \item{riskset}{pair of sender,receiver ids corresponding to dyad index in the riskset}
+#' @return 
+#' A list containing:
+#' \describe{
+#'   \item{edgelist}{A `data.frame` with columns `start_time`, `sender`, `receiver`, and `end_time`.}
+#'   \item{evls}{A matrix containing the event list with columns `dyad`, `start_time`, and `end_time`, 
+#'   where `dyad` represents the index of the dyad or the (`sender`, `receiver`) pair in the risk set.}
+#'   \item{riskset}{A pair of sender and receiver IDs corresponding to the dyad index in the risk set.}
 #' }
+#'
+#' @details 
+#' - A list of available effects for the start and end models of DREM can be obtained with 
+#'   \code{\link[remstats:tie_effects]{remstats::tie_effects()}}. For a list of undirected effects, use 
+#'   \code{\link[remstats:tie_effects]{remstats::tie_effects(directed = FALSE)}}.
+#'
+#' - The `dur_undirected` parameter should be set to `TRUE` if the risk set for the duration model needs to be undirected. 
+#'   For example, if a dyad A → B is part of an event, the undirected dyad (AB = BA) is considered at risk to end the event.
+#'
+#' - If `engaged_stat` is `TRUE`, additional engagement-related statistics are included in the simulation. 
+#'   The parameters for these effects can be specified using `start_engaged_params` for the start model and `end_engaged_params` for the end model.
+#'
 #' @examples 
-#' # Define effects for the start and end model of DREM
+#' # Define effects for the start and end models of DREM
 #' start_effects <- ~ 1 + remstats::inertia(scaling = "std") + remstats::reciprocity(scaling = "std")
 #' end_effects <- ~ 1 + remstats::outdegreeSender(scaling = "std")
 #'
@@ -33,11 +49,21 @@
 #' end_params <- c(-4, -0.2)
 #'
 #' # Run the simulation with specified parameters
-#' drem::dremulate(start_effects, end_effects, start_params, end_params, num_actors = 10, num_events = 1000, event_threshold = 1500)
-#' @details 
-#' A list of available effects for the start and end models of DREM can be obtained with \code{\link[remstats:tie_effects]{remstats::tie_effects()}} and
-#' for a list of undirected effects \code{\link[remstats:tie_effects]{remstats::tie_effects(directed = FALSE)}}
-#' 
+#' simulated_data <- drem::dremulate(
+#'   start_effects, 
+#'   end_effects, 
+#'   start_params, 
+#'   end_params, 
+#'   num_actors = 10, 
+#'   num_events = 1000, 
+#'   event_threshold = 1500, 
+#'   engaged_stat = TRUE, 
+#'   start_engaged_params = c(0.2, 0.2), 
+#'   end_engaged_params = c(0.2, 0.2)
+#' )
+#'
+#' @export
+
 #' @export
 dremulate <- function(
   start_effects,
@@ -49,7 +75,10 @@ dremulate <- function(
   psi_start = 1,
   psi_end = 1,
   dur_undirected = FALSE,
-  event_threshold = NULL
+  event_threshold = NULL,
+  engaged_stat = FALSE,
+  start_engaged_params = NULL,
+  end_engaged_params = NULL
   ){
 	if(is.null(event_threshold)){
 		event_threshold = 3 * num_events
@@ -63,6 +92,8 @@ dremulate <- function(
 	start_stats <- remstats::tomstats(effects = ~ 1 , reh = start_reh)
 
 	rs <- attr(start_stats, 'riskset')
+	rs[,1] <- as.numeric(rs[,1])
+	rs[,2] <- as.numeric(rs[,2])
 
 	if(dur_undirected){
 		end_reh <- remify::remify(dummy, actors = 1:num_actors,model="tie",directed = FALSE)
@@ -84,25 +115,54 @@ dremulate <- function(
 	start_count = 0
 	t = 0
 	while((end_count < num_events & start_count < event_threshold) | (start_count < num_events & end_count < event_threshold)){
+		
+		if (nrow(edgelist) > 0) {
+		 	engaged_stats <- tabulate(as.numeric(unlist(edgelist[edgelist[,1] <= t & edgelist[,4] > t, 2:3], use.names = FALSE)), nbins = num_actors) + tabulate(as.numeric(unlist(edgelist[is.na(edgelist[,4]), 2:3], use.names = FALSE)), nbins = num_actors)		
+		} else {
+			engaged_stats <- rep(0, num_actors) # No engaged events
+		}
+
 		#updating event rate / lambda
 		lambda <- sapply(1:nrow(rs),function(x){
-			if(dyads_is.active[x]){
-				if(end_count == 0){
-					return(exp(end_params[1])) #just baseline effect for first event
-				}				
+			if(engaged_stat){
+				if(dyads_is.active[x]){
+					if(end_count == 0){
+						return(exp(end_params[1])) #just baseline effect for first event
+					}				
 				if(dim(end_stats)[3]==1){
-					return(exp(end_stats[1,x,] * end_params))
+					return(exp(end_stats[1,x,] * end_params +(engaged_stats[rs[x,1]]*end_engaged_params[1] + engaged_stats[rs[x,2]]*end_engaged_params[2])))
 				}
-				return(exp(end_stats[1,x,] %*% end_params)) 
+				return(exp(end_stats[1,x,] %*% end_params +(engaged_stats[rs[x,1]]*end_engaged_params[1] + engaged_stats[rs[x,2]]*end_engaged_params[2]))) 
 			}else{
 				if(start_count == 0){
 					return(exp(start_params[1])) #just baseline effect for first event
 				}
 				if(dim(start_stats)[3]==1){
-					return(exp(start_stats[1,x,] * start_params))
-				}
-				return(exp(start_stats[1,x,] %*% start_params))
+					return(exp( (start_stats[1,x,] * start_params) +(engaged_stats[rs[x,1]]*start_engaged_params[1] + engaged_stats[rs[x,2]]*start_engaged_params[2])))
+				}			
+
+				return(exp( (start_stats[1,x,] %*% start_params)  +(engaged_stats[rs[x,1]]*start_engaged_params[1] + engaged_stats[rs[x,2]]*start_engaged_params[2])))
 			}
+			}else{
+				if(dyads_is.active[x]){
+					if(end_count == 0){
+						return(exp(end_params[1])) #just baseline effect for first event
+					}				
+					if(dim(end_stats)[3]==1){
+						return(exp(end_stats[1,x,] * end_params))
+					}
+					return(exp(end_stats[1,x,] %*% end_params)) 
+				}else{
+					if(start_count == 0){
+						return(exp(start_params[1])) #just baseline effect for first event
+					}
+					if(dim(start_stats)[3]==1){
+						return(exp(start_stats[1,x,] * start_params))
+					}
+					return(exp(start_stats[1,x,] %*% start_params))
+				}
+			}
+			
 		})	
 
 		#sampling waiting time dt
@@ -140,8 +200,8 @@ dremulate <- function(
 			#start an event
 			if(start_count < num_events){
 				#update dyad/sender/receiver
-				evls = rbind(evls,data.frame(dyad = dyad, time = t, end_time = NA))
-				edgelist = rbind(edgelist,data.frame(time = t, actor1 = rs[dyad,1], actor2 = rs[dyad,2], end_time = NA))
+				evls = rbind(evls,data.frame(dyad = dyad, start_time = t, end_time = NA))
+				edgelist = rbind(edgelist,data.frame(start_time = t, actor1 = rs[dyad,1], actor2 = rs[dyad,2], end_time = NA))
 				
 				start_weighted_edgelist = rbind(start_weighted_edgelist,data.frame(time = t, actor1 = rs[dyad,1], actor2 = rs[dyad,2], weight = 1))
 				end_weighted_edgelist = rbind(end_weighted_edgelist,data.frame(time = NA, actor1 = rs[dyad,1], actor2 = rs[dyad,2], weight = 0))
@@ -185,13 +245,13 @@ dremulate <- function(
 	flush.console()
   return(
     list(
-        edgelist = edgelist,
-		evls = evls,
-		start_params = start_params,
-		end_params = end_params,
-		psi_start = psi_start,
-		psi_end = psi_end,
-		riskset = rs
+      edgelist = edgelist,
+      evls = evls,
+      start_params = start_params,
+      end_params = end_params,
+      psi_start = psi_start,
+      psi_end = psi_end,
+      riskset = rs
     )
   )
 }
