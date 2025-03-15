@@ -1,5 +1,6 @@
 
-export(dremulate)
-export(dremstimate)
+export(duremulate)
+export(duremstimate)
+export(duremstimate.grid)
 importFrom(Rcpp, evalCpp)
 exportPattern("^[[:alpha:]]+")
