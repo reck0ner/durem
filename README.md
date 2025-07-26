@@ -1,6 +1,6 @@
-# drem
+# durem
 
-drem is a R library to generate and estimate Duration Relational Event Models (DREM).
+durem is a R library to generate and estimate Duration Relational Event Models (durem).
 
 ### Programming Languages
 The package contains code written in:
@@ -16,23 +16,48 @@ To install the package in R using `devtools`:
 library(devtools)
 install.package(remify)
 install.package(remstats)
-install_github("reck0ner/drem")
+install_github("reck0ner/durem")
 
 #load the package
-library(drem)
+library(durem)
 ```
 
 ## Usage
 ```R
-start_effects <- ~ 1 + remstats::inertia(scaling="std") + remstats::reciprocity(scaling="std")
-end_effects <- ~ 1 + remstats::outdegreeSender(scaling="std")
+# Define the effects for the start model
+start_effects <- ~ 1 + 
+    remstats::inertia(scaling="std") + 
+    remstats::reciprocity(scaling="std")
 
+# Define the effects for the end model
+end_effects   <- ~ 1 + 
+    remstats::outdegreeSender(scaling="std")
+
+# Define the parameters for each effect
+# (order must match the respective formula)
 start_params <- c(-7, 0.2, 0.1)
-end_params <-  c(-4, -0.2)
+end_params   <- c(-4, -0.2)
 
-dat <- drem::dremulate(start_effects, end_effects, start_params, end_params, num_actors = 10, num_events = 500, event_threshold = 1500)
+# Simulate data
+sim <- durem::duremulate(
+    start_effects, 
+    end_effects, 
+    start_params, 
+    end_params, 
+    num_actors  = 10,  
+    num_events  = 500,
+    psi_start = 0.5,
+    psi_end = 0.5,    
+    event_threshold = 1500
+)
 
-est <- drem::dremstimate(start_effects,end_effects, dat$edgelist)
+# Using the previously simulated sim$edgelist
+# Estimate the durem model
+est <- durem::duremstimate(start_effects = start_effects, 
+                           end_effects = end_effects,
+                           psi_start = 0.5,
+                           psi_end = 0.5,
+                           edgelist = sim$edgelist)
 
 summary(est)
 
@@ -40,7 +65,7 @@ summary(est)
 ## Support
 ```R
 #To view all help files in the remulate package
-help(package='drem')
+help(package='durem')
 
 ```
 ## Contributing
