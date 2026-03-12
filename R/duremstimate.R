@@ -15,6 +15,7 @@
 #' @param start_undirected TRUE if riskset for both start and end DuREM models needs to be undirected
 #' @param strip_return logical, if TRUE then strip the heavy elements from a glm output object
 #' @param save_dir character, local directory where to save fitted candidate model files
+#' @param num_cores integer, number of cores to use for parallelized runs. If 1 or NULL, the grid search is sequential. default value is NULL
 #' 
 #' @return list with element \code{loglik}, a matrix or array of loglikelihood of fitted DuREM candidate models and \code{mle}, a vector of candidate values (psi_start,psi_end(,half_life)) with maximum likelihood
 #' @details
@@ -45,9 +46,10 @@ duremstimate.grid <- function(
     engaged_stat = FALSE,
     engaged_directed = FALSE,
     strip_return = TRUE,
-    save_dir = NULL){
-        
-    if(any(edgelist$end_time < edgelist$start_time, na.rm = T)) {
+    save_dir = NULL,
+    num_cores = NULL 
+) {
+   if(any(edgelist$end_time < edgelist$start_time, na.rm = T)) {
         stop("End time of an event cannot be before it's start time.")
     }
     if(anyNA(edgelist$end_time)) {
@@ -61,72 +63,120 @@ duremstimate.grid <- function(
     }
 
     if(memory == "decay"){
-        loglik <- array(data = NA, dim = c(length(psi_start_candidates), length(psi_end_candidates),length(half_life_candidates)))
+        index_grid = expand.grid(i = seq_along(psi_start_candidates), j = seq_along(psi_end_candidates), l = seq_along(half_life_candidates))
     }else{
-        loglik <- array(data = NA, dim = c(length(psi_start_candidates), length(psi_end_candidates)))
+        index_grid= expand.grid(i = seq_along(psi_start_candidates), j = seq_along(psi_end_candidates))
+    }    
+
+    total_iterations <- nrow(index_grid)  # Total number of combinations
+
+    if(!is.null(num_cores) && num_cores > 1){
+        # parallel
+        cl <- parallel::makeCluster(num_cores, type = ifelse(.Platform$OS.type == "windows", "PSOCK", "FORK"))
+
+        parallel::clusterExport(cl, varlist = c("psi_start_candidates", "psi_end_candidates", "half_life_candidates",
+            "start_effects", "end_effects", "edgelist", "memory", "end_undirected", "start_undirected",
+            "engaged_stat", "engaged_directed", "strip_return", "save_dir", "duremstimate"),
+            envir = environment())
+
+        results <- parallel::parLapply(cl, 1: nrow(index_grid), function(idx){
+            i <- as.numeric(index_grid[idx, "i"])
+            j <- as.numeric(index_grid[idx, "j"])
+            l <- ifelse(memory == "decay", as.numeric(index_grid[idx, "l"]), NA)
+
+             fit <- duremstimate(
+                start_effects = start_effects,
+                end_effects = end_effects,
+                edgelist = edgelist,
+                psi_start = psi_start_candidates[i],
+                psi_end = psi_end_candidates[j],
+                memory = memory,
+                half_life = ifelse(memory == "decay", half_life_candidates[l], NA),
+                end_undirected = end_undirected,
+                start_undirected = start_undirected,
+                engaged_stat = engaged_stat,
+                engaged_directed = engaged_directed,
+                strip_return = strip_return
+            )
+
+            loglik_value <- as.numeric(logLik(fit))
+
+            if (!is.null(save_dir)) {
+                file_path <- file.path(save_dir, paste0("durem_fit_psi_start=", psi_start_candidates[i],
+                                                        "_psi_end=", psi_end_candidates[j],
+                                                        ifelse(memory == "decay", paste0("_half_life=", half_life_candidates[l]), ""),
+                                                        ".rdata"))
+                save(fit, file = file_path)
+            }
+            return(list(i = i, j = j, l = l, logLik = loglik_value))
+        })
+
+        parallel::stopCluster(cl)
+    }else {
+        pb <- txtProgressBar(min = 0, max = total_iterations, style = 3)
+
+        results <- vector("list", total_iterations)
+        for (idx in 1: nrow(index_grid)){
+            i <- as.numeric(index_grid[idx, "i"])
+            j <- as.numeric(index_grid[idx, "j"])
+            l <- ifelse(memory == "decay", as.numeric(index_grid[idx, "l"]), NA)
+            
+            fit <- duremstimate(
+                start_effects = start_effects,
+                end_effects = end_effects,
+                edgelist = edgelist,
+                psi_start = psi_start_candidates[i],
+                psi_end = psi_end_candidates[j],
+                memory = memory,
+                half_life = ifelse(memory == "decay", half_life_candidates[l], NA),
+                end_undirected = end_undirected,
+                start_undirected = start_undirected,
+                engaged_stat = engaged_stat,
+                engaged_directed = engaged_directed,
+                strip_return = strip_return
+            )        
+
+            loglik_value <- as.numeric(logLik(fit))
+
+            if (!is.null(save_dir)) {
+                file_path <- file.path(save_dir, paste0("durem_fit_psi_start=", psi_start_candidates[i],
+                                                        "_psi_end=", psi_end_candidates[j],
+                                                        ifelse(memory == "decay", paste0("_half_life=", half_life_candidates[l]), ""),
+                                                        ".rdata"))
+                save(fit, file = file_path)
+            }
+            
+            results[[idx]] <- list(i = i, j = j, l = l, logLik = loglik_value)
+            setTxtProgressBar(pb, idx) 
+        }
+        
+        close(pb)  
     }
 
-    # Progress bar
-    pb <- txtProgressBar(min = 0, max = length(psi_start_candidates)*length(psi_end_candidates), style = 3)
-    
-    for(j in 1:length(psi_start_candidates)){
-        for(k in 1:length(psi_end_candidates)){
-            if(memory == "decay"){
-                for(l in 1:length(half_life_candidates)){
-                     fit <- duremstimate(start_effects, end_effects, edgelist,
-                        psi_start = psi_start_candidates[j],
-                        psi_end = psi_end_candidates[k],
-                        memory = "decay",
-                        half_life = half_life_candidates[l],
-                        end_undirected = end_undirected,
-                        start_undirected = start_undirected,
-                        engaged_stat = engaged_stat,
-                        engaged_directed = engaged_directed,
-                        strip_return = strip_return)
-
-                        loglik[j,k,l] = as.numeric(logLik(fit))
-                        if(!is.null(save_dir)){
-                            file_path = paste0(save_dir,"durem_fit_psi_start=",psi_start_candidates[j],"_psi_end=",psi_end_candidates[k],"_half_life=",half_life_candidates[l],".rdata")
-
-                            save(fit,file = file_path)
-                        }
-                }
-            }else{
-                fit <- duremstimate(start_effects, end_effects, edgelist,
-                        psi_start = psi_start_candidates[j],
-                        psi_end = psi_end_candidates[k],
-                        memory = "full",
-                        end_undirected = end_undirected,
-                        start_undirected = start_undirected,
-                        engaged_stat = engaged_stat,
-                        engaged_directed = engaged_directed,
-                        strip_return = strip_return)
-                loglik[j,k] = as.numeric(logLik(fit))
-
-                if(!is.null(save_dir)){
-                   file_path = paste0(save_dir,"durem_fit_psi_start=",psi_start_candidates[j],"_psi_end=",psi_end_candidates[k],".rdata")
-
-                    save(fit,file = file_path)
-                }
-            }    
-                   
-            # Update progress
-            setTxtProgressBar(pb, (j-1)*length(psi_start_candidates) + k)
-        }    
+    if (memory == "decay") {
+        loglik <- array(NA, dim = c(length(psi_start_candidates), length(psi_end_candidates), length(half_life_candidates)))
+        for (res in results){
+             loglik[res$i, res$j, res$l] <- res$logLik
+            dimnames(loglik) <- list(psi_start_candidates, psi_end_candidates, half_life_candidates)
+        }
+    } else{
+            loglik <- array(NA, dim = c(length(psi_start_candidates), length(psi_end_candidates)))
+        for (res in results){
+            loglik[res$i, res$j] <- res$logLik
+            dimnames(loglik) <- list(psi_start_candidates, psi_end_candidates)
+        }
     }
 
-    dimnames(loglik)[[1]] = psi_start_candidates
-    dimnames(loglik)[[2]] = psi_end_candidates
-    
-    indices <- which(loglik == max(loglik), arr.ind = TRUE)
-    mle = c(dimnames(loglik)[[1]][indices[1]],dimnames(loglik)[[2]][indices[2]])
+    # maximum likelihood estimates
+    indices <- which(loglik == max(loglik, na.rm = TRUE), arr.ind = TRUE)
+    if(memory == "decay"){
+            mle = c(dimnames(loglik)[[1]][indices[1]], dimnames(loglik)[[2]][indices[2]], dimnames(loglik)[[3]][indices[3]])
+    } 
+           else {
+            mle = c(dimnames(loglik)[[1]][indices[1]], dimnames(loglik)[[2]][indices[2]])
+           }
 
-    if(memory=="decay"){
-        dimnames(loglik)[[3]] = half_life_candidates
-        mle = c(dimnames(loglik)[[1]][indices[1]],dimnames(loglik)[[2]][indices[2]],dimnames(loglik)[[3]][indices[3]])
-    }
-    
-    return(list(loglik = loglik , mle = mle))
+    return(list(loglik = loglik, mle = mle))
 }
 
 
@@ -270,7 +320,8 @@ duremstats <- function(start_effects,
     #colnames(edgelist)[1:4] = c("start_time","sender","receiver","end_time")
     
     #### start model
-    edgelist$weight <- (edgelist$end_time - edgelist$start_time+1)^psi_start
+    #edgelist$weight <- (edgelist$end_time - edgelist$start_time+1)^psi_start
+    edgelist$weight <- exp((edgelist$end_time - edgelist$start_time)*psi_start)/(1 + exp((edgelist$end_time - edgelist$start_time)*psi_start))
     
     #split the edgelist into start and end event types
     dur.edgelist = edgelist[rep(seq_len(nrow(edgelist)), each = 2), ]
@@ -290,7 +341,8 @@ duremstats <- function(start_effects,
     dimnames(start_stats)[[3]] = paste0(dimnames(start_stats)[[3]],".start")
     
     #### end model
-    edgelist$weight <- (edgelist$end_time - edgelist$start_time+1)^psi_end
+    #edgelist$weight <- (edgelist$end_time - edgelist$start_time+1)^psi_end
+    edgelist$weight <- exp((edgelist$end_time - edgelist$start_time)*psi_end)/(1 + exp((edgelist$end_time - edgelist$start_time)*psi_end))
     dur.edgelist = edgelist[rep(seq_len(nrow(edgelist)), each = 2), ]
     dur.edgelist$type = rep(c("start","end"),nrow(edgelist))    
     dur.edgelist$time = ifelse(dur.edgelist$type=="start",dur.edgelist$start_time,dur.edgelist$end_time)
@@ -340,43 +392,46 @@ durem_statstack <- function(edgelist,
     
     num_actors = length(unique(c(edgelist[,2],edgelist[,3])))
 
-    #colnames(edgelist)[1:4] = c("start_time","sender","receiver","end_time")
+    colnames(edgelist)[1:4] = c("start_time","sender","receiver","end_time")
 
-    rs = attr(start_stats,"riskset")
+    start_rs = attr(start_stats,"riskset")
+    end_rs = attr(end_stats, "riskset")
+
     #start and end event type dyad id
     if(!start_undirected){
         edgelist$start_dyad <- apply(edgelist,1,function(x){
-        return(which(rs[,1]== x[2] & rs[,2]==x[3] & rs[,3] == "start"))
+        return(which(start_rs[,1]== x[2] & start_rs[,2]==x[3] & start_rs[,3] == "start"))
         })
-        edgelist$end_dyad <- apply(edgelist,1,function(x){
-            return(which(rs[,1]== x[2] & rs[,2]==x[3] & rs[,3] == "end"))
-        })        
     }else{
         edgelist$start_dyad <- apply(edgelist,1,function(x){
-        ind1 = which(rs[,1]== x[2] & rs[,2]==x[3] & rs[,3] == "start")
-        ind2 = which(rs[,2]== x[2] & rs[,1]==x[3] & rs[,3] == "start")
+        ind1 = which(start_rs[,1]== x[2] & start_rs[,2]==x[3] & start_rs[,3] == "start")
+        ind2 = which(start_rs[,2]== x[2] & start_rs[,1]==x[3] & start_rs[,3] == "start")
         return(max(ind1,ind2,na.rm = TRUE))
         })
-        edgelist$end_dyad <- apply(edgelist,1,function(x){
-            ind1 = which(rs[,1]== x[2] & rs[,2]==x[3] & rs[,3] == "end")
-            ind2 = which(rs[,2]== x[2] & rs[,1]==x[3] & rs[,3] == "end")
-            return(max(ind1,ind2,na.rm = TRUE))
-        })        
     }
-
-    if(end_undirected & !start_undirected){
-        dur.rs = attr(end_stats,"riskset")
-        edgelist$end_dyad_und <- apply(edgelist,1,function(x){
-            ind1 = which(dur.rs[,2]== as.numeric(x[2]) & dur.rs[,1]==as.numeric(x[3]) & dur.rs[,3] == "end")
-            ind2 = which(dur.rs[,1]== as.numeric(x[2]) & dur.rs[,2]==as.numeric(x[3]) & dur.rs[,3] == "end")
+    if(!end_undirected){
+        edgelist$end_dyad <- apply(edgelist,1,function(x){
+            return(which(end_rs[,1]== x[2] & end_rs[,2]==x[3] & end_rs[,3] == "end"))
+        })        
+    }else{                
+        edgelist$end_dyad <- apply(edgelist,1,function(x){
+            ind1 = which(end_rs[,1]== x[2] & end_rs[,2]==x[3] & end_rs[,3] == "end")
+            ind2 = which(end_rs[,2]== x[2] & end_rs[,1]==x[3] & end_rs[,3] == "end")
             return(max(ind1,ind2,na.rm = TRUE))
         })
+        # special case: if end undir but start dir
+        if(!start_undirected){
+            edgelist$start_symm_dyad <- apply(edgelist,1,function(x){
+                return(which(start_rs[,1]== x[3] & start_rs[,2]==x[2] & start_rs[,3] == "start"))
+            })
+        }        
     }
     
     P_start = dim(start_stats)[3]
     P_end  = dim(end_stats)[3]
     
-    start_dyads = which(rs[,"type"]== "start")
+    #dyad ids of start rs
+    start_dyads = which(start_rs[,"type"]== "start")
     
     unique_times <- sort(unique(c(edgelist$start_time, edgelist$end_time)))
     
@@ -395,49 +450,34 @@ durem_statstack <- function(edgelist,
     }
     
     stat_stack <- do.call(rbind.data.frame, lapply(1:M, function(i){
-        
-        stack_row = data.frame(matrix(0,nrow = 0,ncol = (5 + dim(start_stats)[3]+ dim(end_stats)[3] + P_durem)))
-                  
+
+        stack_row = data.frame(matrix(0,nrow = 0,ncol = (5 + dim(start_stats)[3]+ dim(end_stats)[3] + P_durem)))                  
         engaged_actors <- tabulate(as.numeric(unlist(edgelist[edgelist$start_time <= unique_times[i] & edgelist$end_time > unique_times[i], 2:3], use.names = FALSE)), nbins = num_actors)
-
-
 
         ###### type 1::State: an event ended
         # end(d) is observed to end
         #Also allows instantaneous events because start_time <= t
         if(i > 1){
             observed_events = subset(edgelist,start_time <= unique_times[i] & end_time == unique_times[i])
-            if(end_undirected & !start_undirected){
-                dyads_observed = unique(observed_events[,"end_dyad_und"])
-            }else{
-                dyads_observed = unique(observed_events[,"end_dyad"])    
-            }
+            
+            dyads_observed = unique(observed_events[,"end_dyad"])    
+            
             if(length(dyads_observed) > 0){
                 stack_row = rbind(stack_row,as.data.frame(do.call(rbind,lapply(dyads_observed, function(d){
                     if(P_durem == 0){
                         return(c(1, d, i, logtimediff[i],1, rep(0,P_start),unname(end_stats[i,d,])))
-                    }else{
-                        # if sender or receiver of d is currently involved in an event then stat_durem = c(0,n) otherwise c(0,0)
-                        if(end_undirected & !start_undirected){
-                            sender = as.numeric(dur.rs[d,1])
-                            receiver = as.numeric(dur.rs[d,2])
-                        }else{
-                            sender = as.numeric(rs[d,1])
-                            receiver = as.numeric(rs[d,2])
-                        }
+                    }else{                                                
                         if(engaged_stat){
                             # Count engaged start overlaps
                             if(engaged_directed){
-                                engaged_send = engaged_actors[sender]
-                                engaged_recv = engaged_actors[receiver]
+                                engaged_send = engaged_actors[as.numeric(end_rs[d,1])]
+                                engaged_recv = engaged_actors[as.numeric(end_rs[d,2])]
                                 stat_durem = c(0,0, engaged_send, engaged_recv)
                             }else{
-                                engaged_end = engaged_actors[sender] + engaged_actors[receiver] - 2                                
-                            stat_durem = c(0, engaged_end)
+                                engaged_end = engaged_actors[as.numeric(end_rs[d,1])] + engaged_actors[as.numeric(end_rs[d,2])] - 2                                
+                                stat_durem = c(0, engaged_end)
                             }
-                        }
-                        
-                        
+                        }                                                
                         return(c(1, d, i, logtimediff[i],1, rep(0,P_start),unname(end_stats[i,d,]),stat_durem))
                     }
                     
@@ -451,35 +491,25 @@ durem_statstack <- function(edgelist,
         #all events active right now but didnt start in the interval
         active_events = subset(edgelist,start_time < unique_times[i] & end_time > unique_times[i])
         #end dyads currently in an event 
-        if(end_undirected& !start_undirected){
-            dyads_at_risk_end = unique(active_events[,"end_dyad_und"])
-        }else{
-            dyads_at_risk_end = unique(active_events[,"end_dyad"])
-        }
         
+        dyads_at_risk_end = unique(active_events[,"end_dyad"])
+                
         #add the active events with end type to riskset
         if(length(dyads_at_risk_end>0)){
             stack_row = rbind(stack_row,as.data.frame(do.call(rbind,lapply(dyads_at_risk_end, function(d){
                 if(P_durem == 0){
                     return(c(0, d, i, logtimediff[i] ,2,rep(0,P_start),unname(end_stats[i,d,])))
                 }else{                    
-                        # if sender or receiver of d is currently involved in an event then stat_durem = c(n,0) otherwise c(0,0)
-                        if(end_undirected & !start_undirected){
-                            sender = as.numeric(dur.rs[d,1])
-                            receiver = as.numeric(dur.rs[d,2])
-                        }else{
-                            sender = as.numeric(rs[d,1])
-                            receiver = as.numeric(rs[d,2])
-                        }
+                        # if sender or receiver of d is currently involved in an event then stat_durem = c(n,0) otherwise c(0,0)                                                                  
                         if(engaged_stat){
                             # Count engaged start overlaps
                             if(engaged_directed){
-                                engaged_send = engaged_actors[sender] - 1 
-                                engaged_recv = engaged_actors[receiver] -1
+                                engaged_send = engaged_actors[as.numeric(end_rs[d,1])] - 1 
+                                engaged_recv = engaged_actors[as.numeric(end_rs[d,2])] -1
 
                                 stat_durem = c(0,0, engaged_send, engaged_recv)
                             }else{
-                                engaged_end = engaged_actors[sender] + engaged_actors[receiver] - 2                                
+                                engaged_end = engaged_actors[as.numeric(end_rs[d,1])] + engaged_actors[as.numeric(end_rs[d,2])] - 2                                
                                 stat_durem = c(0, engaged_end)
                             }
                         }                    
@@ -500,26 +530,18 @@ durem_statstack <- function(edgelist,
             stack_row = rbind(stack_row,as.data.frame(do.call(rbind,lapply(dyads_at_risk_end, function(d){
                 if(P_durem==0){
                     return(c(1, d, i, logtimediff[i] ,3, unname(start_stats[i,d,]),rep(0,P_end)))
-                }else{                    
-                        # if sender or receiver of d is currently involved in an event then stat_durem = c(n,0) otherwise c(0,0)
-                        if(end_undirected & !start_undirected){
-                            sender = as.numeric(dur.rs[d,1])
-                            receiver = as.numeric(dur.rs[d,2])
+                }else{                                                                                           
+                    if(engaged_stat){
+                        # Count engaged start overlaps
+                        if(engaged_directed){
+                            engaged_send = engaged_actors[as.numeric(start_rs[d,1])] - 1 
+                            engaged_recv = engaged_actors[as.numeric(start_rs[d,2]) ] -1
+                            stat_durem = c(engaged_send, engaged_recv, 0, 0)
                         }else{
-                            sender = as.numeric(rs[d,1])
-                            receiver = as.numeric(rs[d,2])
-                        }
-                        if(engaged_stat){
-                            # Count engaged start overlaps
-                            if(engaged_directed){
-                                engaged_send = engaged_actors[sender] - 1 
-                                engaged_recv = engaged_actors[receiver] -1
-                                stat_durem = c(engaged_send, engaged_recv, 0, 0)
-                            }else{
-                                engaged_start = engaged_actors[sender] + engaged_actors[receiver] - 2                               
+                            engaged_start = engaged_actors[as.numeric(start_rs[d,1])] + engaged_actors[as.numeric(start_rs[d,2]) ] - 2                               
                             stat_durem = c(engaged_start, 0)
-                            }
-                        }                  
+                        }
+                    }                  
                     return(c(1, d, i, logtimediff[i] ,3, unname(start_stats[i,d,]),rep(0,P_end),stat_durem))
                 }            
                 }))))
@@ -531,7 +553,13 @@ durem_statstack <- function(edgelist,
         # end time cannot be current time i.e event just ended because then it would be at risk to start
         active_events = subset(edgelist,start_time <= unique_times[i] & end_time > unique_times[i])
         active_dyads = unique(active_events["start_dyad"])
+        
         dyads_at_risk_start = setdiff(start_dyads,active_dyads)
+        if(end_undirected & !start_undirected){
+            # if i-> starts an event and end is undirected and start directed then remove j->i from start riskset            
+            active_symm_dyads = unique(active_events["start_symm_dyad"])            
+            dyads_at_risk_start = setdiff(dyads_at_risk_start,active_symm_dyads)
+        }
         #add the active events with start type to riskset
         if(length(dyads_at_risk_start)>0){
             stack_row = rbind(stack_row,as.data.frame(do.call(rbind,lapply(dyads_at_risk_start, function(d){
@@ -540,21 +568,14 @@ durem_statstack <- function(edgelist,
                 }else{
                         # if sender or receiver of d is currently involved in an event then stat_durem = c(1,0) otherwise c(0,0)
                         # Count engaged start overlaps
-                        if(end_undirected & !start_undirected){
-                            sender = as.numeric(dur.rs[d,1])
-                            receiver = as.numeric(dur.rs[d,2])
-                        }else{
-                            sender = as.numeric(rs[d,1])
-                            receiver = as.numeric(rs[d,2])
-                        }
                         if(engaged_stat){
                             # Count engaged start overlaps
                             if(engaged_directed){
-                                engaged_send = engaged_actors[sender]
-                                engaged_recv = engaged_actors[receiver]
+                                engaged_send = engaged_actors[as.numeric(start_rs[d,1])]
+                                engaged_recv = engaged_actors[as.numeric(start_rs[d,2])]
                                 stat_durem = c(engaged_send, engaged_recv, 0, 0)
                             }else{
-                                engaged_start = engaged_actors[sender] + engaged_actors[receiver]                               
+                                engaged_start = engaged_actors[as.numeric(start_rs[d,1])] + engaged_actors[as.numeric(start_rs[d,2])]                               
                                 stat_durem = c(engaged_start, 0)
                             }
                         }                                    
@@ -572,8 +593,7 @@ durem_statstack <- function(edgelist,
             colnames(stat_stack) = c(c("obs","tie","i","logtimediff","type"),dimnames(start_stats)[[3]],dimnames(end_stats)[[3]],"engaged_sender.start","engaged_receiver.start","engaged_sender.end","engaged_receiver.end")
         }else{
             colnames(stat_stack) = c(c("obs","tie","i","logtimediff","type"),dimnames(start_stats)[[3]],dimnames(end_stats)[[3]],"engaged.start","engaged.end")
-        }
-        
+        }        
     }
     
     return(stat_stack)
@@ -604,131 +624,4 @@ strip_glm = function(cm) {
     attr(cm$formula,".Environment") = c()
     
     cm
-}
-
-#' Estimate hyperparameters for Duration Relational Event Model (DuREM)
-#' 
-#' @description Function to estimate the hyperparameters for duration relational event model (DuREM) using grid search
-#' 
-#'  
-#' @param start_effects formula object for remstats, used to compute the start statistics
-#' @param end_effects formula object for remstats, used to compute the end statistics
-#' @param edgelist data.frame with columns (start_time, sender, receiver, end_time)
-#' @param psi_start_candidates numeric vector of candidate values for psi_start. default value is 1
-#' @param psi_end_candidates numeric vector of candidate values for psi_end. default value is 1
-#' @param memory if "full" then no memory effects are incorporated. If "decay" then decay memory effects with specified half life
-#' @param half_life_candidates numeric vector of candidate values for half life parameters
-#' @param end_undirected TRUE if riskset for the end DuREM model needs to be undirected. See details
-#' @param start_undirected TRUE if riskset for both start and end DuREM models needs to be undirected
-#' @param strip_return logical, if TRUE then strip the heavy elements from a glm output object
-#' @param save_dir character, local directory where to save fitted candidate model files
-#' 
-#' @return list with element \code{loglik}, a matrix or array of loglikelihood of fitted DuREM candidate models and \code{mle}, a vector of candidate values (psi_start,psi_end(,half_life)) with maximum likelihood
-#' @details
-#' \code{end_undirected} is set to \code{TRUE} if riskset for the duration model needs to be undirected. i.e if dyad A->B is in an event, the undirected dyad (AB==BA) is at risk to end the event. This argument can be used when it is not directly observable whether the sender or receiver ended the event
-#' 
-#' A list of available effects for the start and end models of DuREM can be obtained with \code{\link[remstats:tie_effects]{remstats::tie_effects()}} and
-#' for a list of undirected effects \code{\link[remstats:tie_effects]{remstats::tie_effects(directed = FALSE)}}
-#' @examples
-#' 
-#' # Define effects for the start and end model of DuREM
-#' start_effects <- ~ 1 + remstats::inertia(scaling = "std") + remstats::reciprocity(scaling = "std")
-#' end_effects <- ~ 1 + remstats::outdegreeSender(scaling = "std")
-#'
-#' # Fit a DuREM model
-#' durem::duremstimate.grid(start_effects, end_effects, dat$edgelist)
-#' 
-#' @export
-duremstimate.grid.parallel <- function(cl,
-                                      start_effects,
-                                      end_effects,
-                                      edgelist,    
-                                      psi_start_candidates = 1,
-                                      psi_end_candidates = 1,
-                                      memory = c("full", "decay"),
-                                      half_life_candidates = NA,
-                                      end_undirected = FALSE,
-                                      start_undirected = FALSE,
-                                      strip_return = TRUE,
-                                      save_dir = NULL) {
-  
-  if (any(edgelist$end_time < edgelist$start_time, na.rm = TRUE)) {
-      stop("End time of an event cannot be before its start time.")
-  }
-  if (anyNA(edgelist$end_time)) {
-      stop("Missing event end time")
-  }
-  
-  memory <- match.arg(memory)
- 
-  if (memory == "decay" && any(is.na(half_life_candidates))) {
-      stop("Incorrect half life supplied for decay memory.")
-  }
-  
-  # Prepare the parameter grid
-  param_grid <- expand.grid(psi_start = psi_start_candidates,
-                            psi_end = psi_end_candidates,
-                            half_life = ifelse(memory == "decay", half_life_candidates, NA),
-                            stringsAsFactors = FALSE)
-  
-  # Check and convert param_grid to ensure proper data type handling
-  if (!is.data.frame(param_grid)) {
-      param_grid <- as.data.frame(param_grid)
-  }
-
-  # Execute the function in parallel
-  results <- parLapply(cl, param_grid, function(params) {
-    if(memory == "decay"){
-        fit <- duremstimate(start_effects, end_effects, edgelist,
-            psi_start = params[['psi_start']],
-            psi_end = params[['psi_end']],
-            memory = "decay",
-            half_life = params[['half_life']],
-            end_undirected = end_undirected,
-            start_undirected = start_undirected,
-            strip_return = strip_return)
-        if(!is.null(save_dir)){
-            file_path = paste0(save_dir,"durem_fit_psi_start=",psi_start_candidates[j],"_psi_end=",psi_end_candidates[k],"_half_life=",half_life_candidates[l],".rdata")
-
-            save(fit,file = file_path)
-        }                
-    }else{
-        fit <- duremstimate(start_effects, end_effects, edgelist,
-            psi_start = params[['psi_start']],
-            psi_end = params[['psi_end']],
-            memory = "full",
-            end_undirected = end_undirected,
-            start_undirected = start_undirected,
-            strip_return = strip_return)
-
-        if(!is.null(save_dir)){
-            file_path = paste0(save_dir,"durem_fit_psi_start=",psi_start_candidates[j],"_psi_end=",psi_end_candidates[k],".rdata")
-
-            save(fit,file = file_path)
-        }
-    }    
-
-    loglik <- as.numeric(logLik(fit))
-
-    return(loglik)
-  })
-
-  if(memory == "decay") {
-    loglik <- array(data = unlist(results), dim = c(length(psi_start_candidates), length(psi_end_candidates), length(half_life_candidates)))
-    dimnames(loglik)[[3]] = half_life_candidates
-  } else {
-    loglik <- matrix(data = unlist(results), nrow = length(psi_start_candidates), ncol = length(psi_end_candidates))
-  }
-
-  dimnames(loglik)[[1]] = psi_start_candidates
-  dimnames(loglik)[[2]] = psi_end_candidates
-
-  # Determine the maximum likelihood estimates
-  indices <- which(loglik == max(loglik), arr.ind = TRUE)
-  mle = c(dimnames(loglik)[[1]][indices[1]], dimnames(loglik)[[2]][indices[2]])
-  if(memory == "decay") {
-    mle = c(mle, dimnames(loglik)[[3]][indices[3]])
-  }
-
-  return(list(loglik = loglik, mle = mle))
 }
