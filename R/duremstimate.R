@@ -312,6 +312,7 @@ duremstats <- function(start_effects,
     edgelist, 
     psi_start = 0,
     psi_end = 0,
+    dur_sc = 1,
     memory = c("full","decay"),
     half_life = NA,
     end_undirected = FALSE,
@@ -320,8 +321,11 @@ duremstats <- function(start_effects,
     #colnames(edgelist)[1:4] = c("start_time","sender","receiver","end_time")
     
     #### start model
-    #edgelist$weight <- (edgelist$end_time - edgelist$start_time+1)^psi_start
-    edgelist$weight <- exp((edgelist$end_time - edgelist$start_time)*psi_start)/(1 + exp((edgelist$end_time - edgelist$start_time)*psi_start))
+    edgelist$weight <- (edgelist$end_time - edgelist$start_time+1)^psi_start
+    #edgelist$weight <- exp((edgelist$end_time - edgelist$start_time)*psi_start)/(1 + exp((edgelist$end_time - edgelist$start_time)*psi_start))
+    #edgelist$weight <- (((edgelist$end_time - edgelist$start_time+1)*3)^psi_start) / ((((edgelist$end_time - edgelist$start_time+1)*3)^psi_start) + 1 )
+    #edgelist$weight <- (1 + log(edgelist$end_time - edgelist$start_time + 1))^psi_start
+    
     
     #split the edgelist into start and end event types
     dur.edgelist = edgelist[rep(seq_len(nrow(edgelist)), each = 2), ]
@@ -341,8 +345,11 @@ duremstats <- function(start_effects,
     dimnames(start_stats)[[3]] = paste0(dimnames(start_stats)[[3]],".start")
     
     #### end model
-    #edgelist$weight <- (edgelist$end_time - edgelist$start_time+1)^psi_end
-    edgelist$weight <- exp((edgelist$end_time - edgelist$start_time)*psi_end)/(1 + exp((edgelist$end_time - edgelist$start_time)*psi_end))
+    edgelist$weight <- (edgelist$end_time - edgelist$start_time+1)^psi_end
+    #edgelist$weight <- exp((edgelist$end_time - edgelist$start_time)*psi_end)/(1 + exp((edgelist$end_time - edgelist$start_time)*psi_end))
+    #edgelist$weight <- (((edgelist$end_time - edgelist$start_time+1)/dur_sc)^psi_end) / ((((edgelist$end_time - edgelist$start_time+1)/dur_sc)^psi_end) + 1 )
+    #edgelist$weight <- (1 + log(edgelist$end_time - edgelist$start_time + 1))^psi_end
+        
     dur.edgelist = edgelist[rep(seq_len(nrow(edgelist)), each = 2), ]
     dur.edgelist$type = rep(c("start","end"),nrow(edgelist))    
     dur.edgelist$time = ifelse(dur.edgelist$type=="start",dur.edgelist$start_time,dur.edgelist$end_time)
