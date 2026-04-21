@@ -81,7 +81,8 @@ If you use this R package in your research or in any publications, please cite i
       primaryClass={cs.SI},
       url={https://arxiv.org/abs/2602.21000}, 
 }
-'''
+```
+
 
 ## Contributing
 Pull requests and bug reports are welcome. For major changes, please open an issue first to discuss what you would like to change.
