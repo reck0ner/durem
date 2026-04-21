@@ -68,6 +68,21 @@ summary(est)
 help(package='durem')
 
 ```
+## To cite this work
+If you use this R package in your research or in any publications, please cite it as follows to help support our work:
+
+```bibtex
+@misc{lakdawala2026modellinginteractiondurationrelational,
+      title={Modelling Interaction Duration in Relational Event Models}, 
+      author={Rumana Lakdawala and Roger Leenders and Peter Ejbye-Ernst and Joris Mulder},
+      year={2026},
+      eprint={2602.21000},
+      archivePrefix={arXiv},
+      primaryClass={cs.SI},
+      url={https://arxiv.org/abs/2602.21000}, 
+}
+'''
+
 ## Contributing
 Pull requests and bug reports are welcome. For major changes, please open an issue first to discuss what you would like to change.
 
