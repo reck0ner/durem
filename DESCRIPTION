@@ -35,5 +35,7 @@ Imports:
     utils,
     remify (>= 3.2.0),
     remstats
+Suggests:
+    parallel
 RoxygenNote: 7.3.3
 Encoding: UTF-8
